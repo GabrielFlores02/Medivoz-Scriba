@@ -21,7 +21,8 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 CREATE TYPE rol_aplicacion AS ENUM (
   'doctor',
-  'administrador'
+  'administrador',
+  'evaluador'
 );
 
 CREATE TYPE estado_cuenta AS ENUM (

@@ -24,8 +24,15 @@ export function Sidebar() {
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
 
-  const navItems = useMemo(
-    () => [
+  const navItems = useMemo(() => {
+    if (user?.rol === "evaluador") {
+      return [
+        { name: "Inicio", href: "/dashboard", icon: Home },
+        { name: "Evaluaciones PDQI-9", href: "/evaluations", icon: FlaskConical },
+      ];
+    }
+
+    return [
       { name: "Inicio", href: "/dashboard", icon: Home },
       ...(["doctor", "administrador"].includes(user?.rol || "")
         ? [{ name: "Estudio 2.0", href: "/study", icon: FlaskConical }]
@@ -36,9 +43,8 @@ export function Sidebar() {
       ...(user?.rol === "administrador"
         ? [{ name: "Agentes IA", href: "/agents", icon: Cpu }]
         : []),
-    ],
-    [user?.rol]
-  );
+    ];
+  }, [user?.rol]);
 
   useEffect(() => {
     setMobileOpen(false);

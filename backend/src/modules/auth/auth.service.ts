@@ -79,10 +79,10 @@ export class AuthService {
       nombre: getSpecialityLabel(item.nombre),
     }));
 
-    const rol = roles.some((r) => r.rol === "administrador")
+    const rol = roles.some((r) => String(r.rol) === "administrador" || String(r.rol) === "coordinador")
       ? "administrador"
-      : roles.some((r) => r.rol === "coordinador")
-        ? "coordinador"
+      : roles.some((r) => String(r.rol) === "evaluador")
+        ? "evaluador"
         : "doctor";
 
     return {

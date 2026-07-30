@@ -4,7 +4,7 @@
 -- No crea tablas de consentimiento, encuestas ni PDQI-9.
 -- =========================================================
 
-ALTER TYPE rol_aplicacion ADD VALUE IF NOT EXISTS 'coordinador';
+-- El rol de coordinación se integra en Administrador; no se crean roles adicionales.
 
 CREATE TABLE IF NOT EXISTS protocolos_estudio (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),

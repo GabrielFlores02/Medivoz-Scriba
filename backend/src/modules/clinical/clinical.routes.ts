@@ -11,6 +11,13 @@ import { convertSchema } from "../../core/utils/schema.js";
 export async function clinicalRoutes(app: FastifyInstance) {
   // All routes in this module require authentication
   app.addHook("onRequest", app.authenticate);
+  app.addHook("preHandler", async (request, reply) => {
+    if (String((request.user as any).rol) === "evaluador") {
+      return reply.code(403).send({
+        error: "El rol Evaluador no accede a pacientes, consultas ni datos clínicos identificables",
+      });
+    }
+  });
 
   // --- Patients ---
 

@@ -16,6 +16,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 import { logger } from "@/utils/logger";
+import EvaluatorDashboard from "./EvaluatorDashboard";
 
 interface DashboardStats {
   totalPatients: number;
@@ -26,6 +27,7 @@ interface DashboardStats {
 
 export default function Dashboard() {
   const { user } = useAuth();
+  if (user?.rol === "evaluador") return <EvaluatorDashboard />;
   const [greeting, setGreeting] = useState("");
 
   useEffect(() => {

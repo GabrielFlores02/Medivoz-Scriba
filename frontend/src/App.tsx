@@ -10,6 +10,7 @@ import { Loader2 } from "lucide-react";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PrivateRoute } from "./components/auth/PrivateRoute";
 import { AdminRoute } from "./components/auth/AdminRoute";
+import { RoleRoute } from "./components/auth/RoleRoute";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -28,6 +29,7 @@ const AgentDetail = lazy(() => import("./pages/AgentDetail"));
 const StudyDashboard = lazy(() => import("./pages/StudyDashboard"));
 const StudySession = lazy(() => import("./pages/StudySession"));
 const StudyPending = lazy(() => import("./pages/StudyPending"));
+const EvaluatorDashboard = lazy(() => import("./pages/EvaluatorDashboard"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Loading fallback component with better UX
@@ -85,16 +87,19 @@ const App = () => {
                         <Route path="/signup" element={<Signup />} />
                         <Route element={<PrivateRoute />}>
                           <Route path="/dashboard" element={<Dashboard />} />
-                          <Route path="/patients" element={<Patients />} />
-                          <Route path="/session" element={<Session />} />
-                          <Route path="/history" element={<SessionHistory />} />
-                          <Route element={<AdminRoute />}>
-                            <Route path="/agents" element={<Agents />} />
-                            <Route path="/agents/:id" element={<AgentDetail />} />
+                          <Route path="/evaluations" element={<EvaluatorDashboard />} />
+                          <Route element={<RoleRoute allowedRoles={["doctor", "administrador"]} />}>
+                            <Route path="/patients" element={<Patients />} />
+                            <Route path="/session" element={<Session />} />
+                            <Route path="/history" element={<SessionHistory />} />
                             <Route path="/study" element={<StudyDashboard />} />
                             <Route path="/study/new" element={<StudySession />} />
                             <Route path="/study/pending" element={<StudyPending />} />
                             <Route path="/study/consultations/:id" element={<StudySession />} />
+                          </Route>
+                          <Route element={<AdminRoute />}>
+                            <Route path="/agents" element={<Agents />} />
+                            <Route path="/agents/:id" element={<AgentDetail />} />
                           </Route>
                         </Route>
                         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

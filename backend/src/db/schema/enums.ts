@@ -1,6 +1,6 @@
 import { pgEnum } from "drizzle-orm/pg-core";
 
-export const roleEnum = pgEnum("rol_aplicacion", ["doctor", "administrador", "coordinador"]);
+export const roleEnum = pgEnum("rol_aplicacion", ["doctor", "administrador", "evaluador"]);
 
 export const accountStatusEnum = pgEnum("estado_cuenta", [
   "activa",
