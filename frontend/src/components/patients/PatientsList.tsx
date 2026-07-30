@@ -120,10 +120,12 @@ export function PatientsList({
                   </div>
                 </TableCell>
 
-                <TableCell className="font-mono text-xs text-muted-foreground">{patient.dni}</TableCell>
+                <TableCell className="font-mono text-xs text-muted-foreground">
+                  {patient.dni || patient.codigoPaciente || "-"}
+                </TableCell>
                 <TableCell>
                   {patient.edad ? (
-                    `${patient.edad} anos`
+                    `${patient.edad} años`
                   ) : (
                     <span className="text-xs italic text-muted-foreground">N/A</span>
                   )}

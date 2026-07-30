@@ -31,8 +31,18 @@ export function MedicalRecordModal({
     handleSave, 
     handleExportPDF,
     setFormData,
+    recordSummary,
+    handleRecordSummaryChange,
+    sectionMeta,
+    validationWarnings,
+    handleAcceptSuggestion,
+    handleRejectSuggestion,
+    handleBlockSection,
+    handleRetrySection,
+    handleRefineSection,
     recordExists,
-    refreshTranscription
+    refreshTranscription,
+    refreshRecordData
   } = useMedicalRecord(sessionId || null, patientId || null);
 
   const handleSaveAndClose = async () => {
@@ -86,12 +96,22 @@ export function MedicalRecordModal({
           showFullTranscription={showFullTranscription}
           toggleTranscriptionView={toggleTranscriptionView}
           handleChange={handleChange}
+          sectionMeta={sectionMeta}
+          recordSummary={recordSummary}
+          onRecordSummaryChange={handleRecordSummaryChange}
+          validationWarnings={validationWarnings}
+          onAcceptSuggestion={handleAcceptSuggestion}
+          onRejectSuggestion={handleRejectSuggestion}
+          onBlockSection={handleBlockSection}
+          onRetrySection={handleRetrySection}
+          onRefineSection={handleRefineSection}
           isSaving={isSaving}
           isExporting={isExporting}
           onClose={() => onOpenChange(false)}
           onSave={handleSaveAndClose}
           onExport={handleExportPDFClick}
           refreshTranscription={refreshTranscription}
+          refreshRecordData={refreshRecordData}
           patientId={patientId}
           sessionId={sessionId}
         />

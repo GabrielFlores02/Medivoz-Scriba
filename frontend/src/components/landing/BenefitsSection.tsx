@@ -12,7 +12,7 @@ export const BenefitsSection = () => {
     { value: "70%", label: "Menos tiempo de documentacion" },
     { value: "99%", label: "Precision en transcripcion" },
     { value: "30%", label: "Mas tiempo con pacientes" },
-    { value: "1.2M+", label: "Horas recuperables al ano" },
+    { value: "1.2M+", label: "Horas recuperables al año" },
   ];
 
   return (

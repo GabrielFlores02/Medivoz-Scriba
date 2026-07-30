@@ -6,7 +6,10 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "test": "tsx --test src/modules/study/study.policy.test.ts",
     "start": "node dist/server.js",
+    "start:local": "node --use-system-ca dist/server.js",
+    "worker:local": "node --use-system-ca dist/worker/clinical.worker.js",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push"

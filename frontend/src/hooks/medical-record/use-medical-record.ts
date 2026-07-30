@@ -1,16 +1,23 @@
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { exportMedicalRecordPDF } from "./use-medical-record-pdf";
 import {
   fetchTranscriptionData,
   checkRecordExists,
   fetchExistingRecord,
+  fetchRecordValidation,
   fetchPatientData,
+  refineMedicalRecordSection,
+  retryMedicalRecordSection,
+  reviewMedicalRecordSection,
   saveMedicalRecord,
   MedicalRecordFormData,
-  PatientData
+  PatientData,
+  RecordSummaryData,
+  SectionMetaMap
 } from "./use-medical-record-api";
 import { logger } from "@/utils/logger";
+import { toast } from "sonner";
 
 export function useMedicalRecord(sessionId: string | null, patientId: string | null) {
   const [isSaving, setIsSaving] = useState(false);
@@ -21,6 +28,15 @@ export function useMedicalRecord(sessionId: string | null, patientId: string | n
   const [showFullTranscription, setShowFullTranscription] = useState(false);
   const [patientData, setPatientData] = useState<PatientData | null>(null);
   const [recordExists, setRecordExists] = useState(false);
+  const [sectionMeta, setSectionMeta] = useState<SectionMetaMap>({});
+  const [summaryData, setSummaryData] = useState<Partial<Record<keyof MedicalRecordFormData, string>>>({});
+  const [recordSummary, setRecordSummary] = useState<RecordSummaryData>({
+    resumenSugeridoIa: "",
+    resumenActual: "",
+  });
+  const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
+  const editStartRef = useRef<Partial<Record<keyof MedicalRecordFormData, number>>>({});
+  const editDurationsRef = useRef<Partial<Record<keyof MedicalRecordFormData, number>>>({});
   
   const [formData, setFormData] = useState<MedicalRecordFormData>({
     motivo_consulta: "",
@@ -71,8 +87,21 @@ export function useMedicalRecord(sessionId: string | null, patientId: string | n
         logger.log("Record exists, loading data");
         const recordData = await fetchExistingRecord(sessionId, patientId);
         if (recordData) {
-          logger.log("Record data loaded:", recordData);
-          setFormData(recordData);
+          logger.log("Record data loaded");
+          setFormData(recordData.formData);
+          setSectionMeta(recordData.sectionMeta);
+          setRecordSummary(recordData.recordSummary);
+          const nextSummary: Partial<Record<keyof MedicalRecordFormData, string>> = {};
+          for (const [field, meta] of Object.entries(recordData.sectionMeta)) {
+            nextSummary[field as keyof MedicalRecordFormData] = meta?.resumenActual || meta?.resumenSugeridoIa || "";
+          }
+          setSummaryData(nextSummary);
+          logger.info("Medical record state hydrated", {
+            sessionId,
+            sectionMetaCount: Object.keys(recordData.sectionMeta).length,
+            summaryCount: Object.values(nextSummary).filter((value) => value?.trim()).length,
+            hasRecordSummary: Boolean(recordData.recordSummary.resumenActual || recordData.recordSummary.resumenSugeridoIa),
+          });
         }
       } else {
         logger.log("No existing record found, will create new when saved");
@@ -89,7 +118,7 @@ export function useMedicalRecord(sessionId: string | null, patientId: string | n
     try {
       const data = await fetchPatientData(patientId);
       if (data) {
-        logger.log("Patient data loaded:", data);
+        logger.log("Patient data loaded");
         setPatientData(data);
       }
     } catch (error) {
@@ -133,8 +162,205 @@ export function useMedicalRecord(sessionId: string | null, patientId: string | n
 
   const handleChange = useCallback((e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
+    const field = name as keyof MedicalRecordFormData;
+    if (!editStartRef.current[field]) {
+      editStartRef.current[field] = Date.now();
+    }
     setFormData(prev => ({ ...prev, [name]: value }));
   }, []);
+
+  const handleAcceptSuggestion = useCallback(async (field: keyof MedicalRecordFormData) => {
+    const suggestion = sectionMeta[field]?.textoSugeridoIa;
+    if (!sessionId) return false;
+    const visibleText = formData[field] || "";
+    const doctorEditedSuggestion = Boolean(
+      suggestion?.trim() &&
+        visibleText.trim() &&
+        visibleText.trim() !== suggestion.trim()
+    );
+    const currentText = visibleText || suggestion || "";
+    const summary = doctorEditedSuggestion
+      ? visibleText
+      : sectionMeta[field]?.resumenSugeridoIa || summaryData[field] || "";
+
+    if (!currentText.trim() && !summary.trim()) {
+      toast.warning("Primero debe existir texto o una sugerencia IA para validar esta seccion.");
+      return false;
+    }
+
+    if (suggestion && !doctorEditedSuggestion && !visibleText.trim()) {
+      setFormData((prev) => ({ ...prev, [field]: suggestion }));
+    }
+    setSummaryData((prev) => ({
+      ...prev,
+      [field]: summary,
+    }));
+    await reviewMedicalRecordSection(sessionId, field, "accept", {
+      contenido: currentText,
+      resumenActual: summary,
+    });
+    logger.info("Medical record section accepted", {
+      sessionId,
+      field,
+      hadSuggestion: Boolean(suggestion),
+      doctorEditedSuggestion,
+      hadSummary: Boolean(summary.trim()),
+    });
+    setSectionMeta((prev) => ({
+      ...prev,
+      [field]: prev[field]
+        ? {
+            ...prev[field]!,
+            textoActual: currentText,
+            textoSugeridoIa: null,
+            resumenActual: summary || prev[field]!.resumenActual,
+            resumenSugeridoIa: null,
+            estado: "revisada",
+          }
+        : {
+            nombre: field,
+            textoActual: currentText,
+            textoSugeridoIa: null,
+            resumenActual: summary,
+            resumenSugeridoIa: null,
+            estado: "revisada",
+            confianza: null,
+            origenDato: null,
+          },
+    }));
+    return true;
+  }, [formData, sectionMeta, sessionId, summaryData]);
+
+  const handleRejectSuggestion = useCallback(async (field: keyof MedicalRecordFormData) => {
+    if (!sessionId) return false;
+    await reviewMedicalRecordSection(sessionId, field, "reject");
+    logger.info("Medical record section rejected", { sessionId, field });
+    setSectionMeta((prev) => ({
+      ...prev,
+      [field]: prev[field]
+        ? {
+            ...prev[field]!,
+            textoSugeridoIa: null,
+            resumenSugeridoIa: null,
+            estado: prev[field]!.textoActual ? "revisada" : "vacia",
+          }
+        : prev[field],
+    }));
+    return true;
+  }, [sessionId]);
+
+  const handleSummaryChange = useCallback((field: keyof MedicalRecordFormData, value: string) => {
+    setSummaryData((prev) => ({ ...prev, [field]: value }));
+  }, []);
+
+  const handleRecordSummaryChange = useCallback((value: string) => {
+    setRecordSummary((prev) => ({
+      ...prev,
+      resumenActual: value,
+    }));
+  }, []);
+
+  const refreshValidation = useCallback(async () => {
+    if (!sessionId) return;
+    try {
+      const result = await fetchRecordValidation(sessionId);
+      logger.info("Medical record validation loaded", {
+        sessionId,
+        ok: result.ok,
+        missingRequired: result.missingRequired.length,
+        pendingReview: result.pendingReview.length,
+      });
+      setValidationWarnings([
+        ...result.missingRequired.map((item) => item.mensaje),
+        ...result.pendingReview.map((item) => item.mensaje),
+      ]);
+    } catch (error) {
+      logger.warn("No se pudo obtener validacion clinica", error);
+    }
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (sessionId && recordExists) {
+      void refreshValidation();
+    }
+  }, [recordExists, refreshValidation, sessionId]);
+
+  const handleBlockSection = useCallback(async (field: keyof MedicalRecordFormData) => {
+    if (!sessionId) return false;
+    await reviewMedicalRecordSection(sessionId, field, "block");
+    logger.info("Medical record section blocked", { sessionId, field });
+    setSectionMeta((prev) => ({
+      ...prev,
+      [field]: prev[field] ? { ...prev[field]!, estado: "bloqueada" } : prev[field],
+    }));
+    return true;
+  }, [sessionId]);
+
+  const handleRetrySection = useCallback(async (field: keyof MedicalRecordFormData) => {
+    if (!sessionId) return false;
+    try {
+      const result = await retryMedicalRecordSection(sessionId, field);
+      logger.info("Medical record section retry queued", {
+        sessionId,
+        field,
+        jobId: result?.job?.jobId,
+        state: result?.job?.state,
+      });
+      toast.info("IA reintentando esta seccion. Actualizare la ficha en unos segundos.");
+      window.setTimeout(() => {
+        void loadRecordData();
+        void refreshValidation();
+      }, 2500);
+      return true;
+    } catch (error) {
+      logger.error("Error retrying medical record section", { sessionId, field, error });
+      toast.error("No se pudo reintentar esta seccion con IA.");
+      return false;
+    }
+  }, [loadRecordData, refreshValidation, sessionId]);
+
+  const handleRefineSection = useCallback(async (field: keyof MedicalRecordFormData) => {
+    if (!sessionId) return false;
+    try {
+      const result = await refineMedicalRecordSection(sessionId, field, "formato_institucional");
+      const suggestion = result?.suggestion?.trim?.() || "";
+      if (!suggestion) {
+        toast.warning("La IA no pudo proponer una mejora para esta seccion.");
+        return false;
+      }
+      setSectionMeta((prev) => ({
+        ...prev,
+        [field]: prev[field]
+          ? {
+              ...prev[field]!,
+              textoSugeridoIa: suggestion,
+              resumenSugeridoIa: suggestion,
+              estado: "borrador_ia",
+            }
+          : {
+              nombre: field,
+              textoActual: formData[field] || null,
+              textoSugeridoIa: suggestion,
+              resumenActual: null,
+              resumenSugeridoIa: suggestion,
+              estado: "borrador_ia",
+              confianza: null,
+              origenDato: null,
+            },
+      }));
+      logger.info("Medical record section refined", {
+        sessionId,
+        field,
+        suggestionChars: suggestion.length,
+      });
+      toast.success("IA propuso una version breve. Revisa y valida si te sirve.");
+      return true;
+    } catch (error) {
+      logger.error("Error refining medical record section", { sessionId, field, error });
+      toast.error("No se pudo mejorar esta seccion con IA.");
+      return false;
+    }
+  }, [formData, sessionId]);
 
   const toggleTranscriptionView = useCallback(() => {
     setShowFullTranscription(prev => !prev);
@@ -142,12 +368,40 @@ export function useMedicalRecord(sessionId: string | null, patientId: string | n
 
   const handleSave = useCallback(async () => {
     try {
-      return await saveMedicalRecord(formData, patientId || "", sessionId || "", recordExists, setIsSaving);
+      const now = Date.now();
+      for (const [field, startedAt] of Object.entries(editStartRef.current)) {
+        if (!startedAt) continue;
+        const key = field as keyof MedicalRecordFormData;
+        editDurationsRef.current[key] = (editDurationsRef.current[key] || 0) + (now - startedAt);
+      }
+      editStartRef.current = {};
+
+      const saved = await saveMedicalRecord(
+        formData,
+        patientId || "",
+        sessionId || "",
+        recordExists,
+        setIsSaving,
+        editDurationsRef.current,
+        summaryData,
+        sectionMeta,
+        recordSummary
+      );
+      if (saved) {
+        logger.info("Medical record saved from hook", {
+          sessionId,
+          sectionCount: Object.values(formData).filter((value) => value.trim()).length,
+          hasRecordSummary: Boolean(recordSummary.resumenActual.trim() || recordSummary.resumenSugeridoIa.trim()),
+        });
+        editDurationsRef.current = {};
+        await refreshValidation();
+      }
+      return saved;
     } catch (error) {
       logger.error("Error saving medical record:", error);
       return false;
     }
-  }, [formData, patientId, sessionId, recordExists]);
+  }, [formData, patientId, sessionId, recordExists, summaryData, sectionMeta, recordSummary, refreshValidation]);
 
   const handleExportPDF = useCallback(async () => {
     try {
@@ -172,8 +426,20 @@ export function useMedicalRecord(sessionId: string | null, patientId: string | n
     handleSave,
     handleExportPDF,
     setFormData,
+    summaryData,
+    handleSummaryChange,
+    recordSummary,
+    handleRecordSummaryChange,
+    sectionMeta,
+    validationWarnings,
+    handleAcceptSuggestion,
+    handleRejectSuggestion,
+    handleBlockSection,
+    handleRetrySection,
+    handleRefineSection,
     recordExists,
-    refreshTranscription
+    refreshTranscription,
+    refreshRecordData: loadRecordData
   };
 }
 

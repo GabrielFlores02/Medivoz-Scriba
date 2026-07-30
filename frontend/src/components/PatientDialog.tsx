@@ -4,7 +4,6 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import api from "@/lib/api";
 import { toast } from "sonner";
 import { logger } from "@/utils/logger";
-import { useAuth } from "@/contexts/AuthContext";
 import {
   Dialog,
   DialogContent,
@@ -15,6 +14,7 @@ import {
 import { Form } from "@/components/ui/form";
 import { PatientFormFields } from "@/components/patients/PatientFormFields";
 import { PatientDialogActions } from "@/components/patients/PatientDialogActions";
+import { buildPatientPayload } from "@/components/patients/patientPayload";
 import { 
   patientFormSchema, 
   PatientFormValues, 
@@ -58,7 +58,7 @@ export function PatientDialog({
     if (isEditing && patient) {
       form.reset({
         nombre: patient.nombre,
-        dni: patient.dni,
+        dni: patient.dni || "",
         edad: patient.edad,
         ocupacion: patient.ocupacion || "",
         procedencia: patient.procedencia || "",
@@ -82,28 +82,15 @@ export function PatientDialog({
     try {
       if (isEditing && patient) {
         // Update existing patient
-        await api.patch(`/clinical/patients/${patient.id}`, {
-          nombre: data.nombre,
-          identificacion: data.dni,
-          metadata: {
-            ocupacion: data.ocupacion || null,
-            procedencia: data.procedencia || null,
-            diagnostico: data.diagnostico || null,
-          }
-        });
+        await api.patch(
+          `/clinical/patients/${patient.id}`,
+          buildPatientPayload(data)
+        );
         
         toast.success("Paciente actualizado correctamente");
       } else {
         // Create new patient
-        await api.post('/clinical/patients', {
-          nombre: data.nombre,
-          identificacion: data.dni,
-          metadata: {
-            ocupacion: data.ocupacion || null,
-            procedencia: data.procedencia || null,
-            diagnostico: data.diagnostico || null,
-          }
-        });
+        await api.post('/clinical/patients', buildPatientPayload(data));
         
         toast.success("Paciente registrado correctamente");
       }
@@ -134,7 +121,7 @@ export function PatientDialog({
           <DialogDescription>
             {isEditing 
               ? 'Actualice los datos del paciente seleccionado.'
-              : 'Complete los datos del paciente. Solo nombre y DNI son obligatorios.'
+              : 'Complete los datos del paciente. Solo el nombre es obligatorio en fase 1.'
             }
           </DialogDescription>
         </DialogHeader>

@@ -63,6 +63,8 @@ export function PatientSearch({ onPatientSelect, selectedPatient }: PatientSearc
   const handleClearSelection = () => {
     onPatientSelect(null);
   };
+
+  const getPatientIdentifier = (patient: Patient) => patient.dni || patient.codigoPaciente || "Sin codigo";
   
   const handlePatientCreated = () => {
     toast.success("Paciente creado. Ahora puedes seleccionarlo en la búsqueda.");
@@ -76,7 +78,9 @@ export function PatientSearch({ onPatientSelect, selectedPatient }: PatientSearc
             <div className="flex justify-between items-center">
               <div>
                 <h3 className="font-medium text-lg text-card-foreground">{selectedPatient.nombre}</h3>
-                <p className="text-sm text-muted-foreground">DNI: {selectedPatient.dni}</p>
+                <p className="text-sm text-muted-foreground">
+                  {selectedPatient.dni ? "DNI" : "Codigo"}: {getPatientIdentifier(selectedPatient)}
+                </p>
                 {selectedPatient.edad && <p className="text-sm text-card-foreground">{selectedPatient.edad} años</p>}
               </div>
               <Button variant="ghost" size="sm" onClick={handleClearSelection}>
@@ -91,7 +95,7 @@ export function PatientSearch({ onPatientSelect, selectedPatient }: PatientSearc
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar paciente por nombre o DNI"
+                placeholder="Buscar paciente por nombre, DNI o codigo"
                 className="pl-8"
                 value={searchQuery}
                 onChange={handleInputChange}
@@ -117,7 +121,9 @@ export function PatientSearch({ onPatientSelect, selectedPatient }: PatientSearc
                   >
                     <div>
                       <div className="font-medium text-card-foreground">{patient.nombre}</div>
-                      <div className="text-sm text-muted-foreground">DNI: {patient.dni}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {patient.dni ? "DNI" : "Codigo"}: {getPatientIdentifier(patient)}
+                      </div>
                     </div>
                     {patient.edad && <div className="text-sm text-card-foreground">{patient.edad} años</div>}
                   </div>

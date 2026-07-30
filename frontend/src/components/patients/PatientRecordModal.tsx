@@ -163,7 +163,9 @@ export function PatientRecordModal({ open, onOpenChange, patient }: PatientRecor
                 {patient ? (
                   <>
                     <span className="font-semibold text-foreground">{patient.nombre}</span>
-                    <span className="rounded-md border bg-background px-2 py-0.5 font-mono text-xs">DNI: {patient.dni}</span>
+                    <span className="rounded-md border bg-background px-2 py-0.5 font-mono text-xs">
+                      {patient.dni ? "DNI" : "Codigo"}: {patient.dni || patient.codigoPaciente || "Sin codigo"}
+                    </span>
                   </>
                 ) : (
                   "Cargando informacion..."

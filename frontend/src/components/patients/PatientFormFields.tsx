@@ -30,10 +30,11 @@ export function PatientFormFields({ form }: PatientFormFieldsProps) {
         name="dni"
         render={({ field }) => (
           <FormItem>
-            <FormLabel>DNI*</FormLabel>
+            <FormLabel>DNI</FormLabel>
             <FormControl>
               <Input placeholder="12345678" {...field} />
             </FormControl>
+            <FormDescription>Opcional en fase 1</FormDescription>
             <FormMessage />
           </FormItem>
         )}

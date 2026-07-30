@@ -1,0 +1,37 @@
+name: medivoz-local
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: medivoz-local-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:?Define DB_NAME in .env}
+      POSTGRES_USER: ${DB_USER:?Define DB_USER in .env}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?Define DB_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:55432:5432"
+    volumes:
+      - medivoz-local-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: medivoz-local-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "127.0.0.1:56379:6379"
+    volumes:
+      - medivoz-local-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  medivoz-local-postgres-data:
+  medivoz-local-redis-data:

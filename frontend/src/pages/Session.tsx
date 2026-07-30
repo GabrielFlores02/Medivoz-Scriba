@@ -16,10 +16,26 @@ import { useMedicalRecord } from "@/hooks/medical-record/use-medical-record";
 import { logger } from "@/utils/logger";
 import api from "@/lib/api";
 
+type AnamnesisPhase = {
+  estadoAnamnesis?: string | null;
+  segmentoFinAnamnesis?: number | null;
+  confianzaCierreAnamnesis?: string | number | null;
+  motivoCierreAnamnesis?: string | null;
+};
+
+const anamnesisPhaseLabels: Record<string, string> = {
+  no_iniciada: "Anamnesis no iniciada",
+  en_anamnesis: "Anamnesis en curso",
+  probable_cierre: "Anamnesis probablemente cerrada",
+  cerrada: "Anamnesis cerrada",
+  reabierta: "Anamnesis reabierta",
+};
+
 export default function Session() {
   const [transcription, setTranscription] = useState("");
   const [selectedPatient, setSelectedPatient] = useState<Patient | null>(null);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [anamnesisPhase, setAnamnesisPhase] = useState<AnamnesisPhase | null>(null);
   const [searchParams] = useSearchParams();
   const patientId = selectedPatient?.id || null;
 
@@ -36,8 +52,18 @@ export default function Session() {
     handleSave,
     handleExportPDF,
     setFormData,
+    sectionMeta,
+    recordSummary,
+    validationWarnings,
+    handleRecordSummaryChange,
+    handleAcceptSuggestion,
+    handleRejectSuggestion,
+    handleBlockSection,
+    handleRetrySection,
+    handleRefineSection,
     recordExists,
     refreshTranscription,
+    refreshRecordData,
   } = useMedicalRecord(currentSessionId, patientId);
 
   const loadPatient = useCallback(async (id: string) => {
@@ -48,7 +74,8 @@ export default function Session() {
         setSelectedPatient({
           id: data.id,
           nombre: data.nombre,
-          dni: data.dni,
+          dni: data.dni ?? null,
+          codigoPaciente: data.codigoPaciente ?? null,
           edad: data.edad,
           ocupacion: data.ocupacion,
           procedencia: data.procedencia,
@@ -77,15 +104,43 @@ export default function Session() {
     setTranscription(text);
   }, []);
 
+  const refreshAnamnesisPhase = useCallback(async () => {
+    if (!currentSessionId) return;
+    try {
+      const response = await api.get(`/clinical/consultations/${currentSessionId}`);
+      setAnamnesisPhase({
+        estadoAnamnesis: response.data?.estadoAnamnesis,
+        segmentoFinAnamnesis: response.data?.segmentoFinAnamnesis,
+        confianzaCierreAnamnesis: response.data?.confianzaCierreAnamnesis,
+        motivoCierreAnamnesis: response.data?.motivoCierreAnamnesis,
+      });
+    } catch (error) {
+      logger.warn("No se pudo actualizar fase de anamnesis", error);
+    }
+  }, [currentSessionId]);
+
   useEffect(() => {
     if (transcription && currentSessionId) {
       const timeoutId = setTimeout(async () => {
         logger.log("Refreshing transcription from DB for session:", currentSessionId);
         await refreshTranscription();
+        await refreshAnamnesisPhase();
       }, 1500);
       return () => clearTimeout(timeoutId);
     }
-  }, [transcription, currentSessionId, refreshTranscription]);
+  }, [transcription, currentSessionId, refreshTranscription, refreshAnamnesisPhase]);
+
+  useEffect(() => {
+    if (!currentSessionId) {
+      setAnamnesisPhase(null);
+      return;
+    }
+    void refreshAnamnesisPhase();
+    const intervalId = window.setInterval(() => {
+      void refreshAnamnesisPhase();
+    }, 7000);
+    return () => window.clearInterval(intervalId);
+  }, [currentSessionId, refreshAnamnesisPhase]);
 
   const patientInfoProps = useMemo(() => {
     const patient = patientData || selectedPatient;
@@ -111,10 +166,10 @@ export default function Session() {
                   <span className="rounded-xl bg-primary/10 p-2">
                     <Stethoscope className="h-7 w-7 text-primary" />
                   </span>
-                  Sesion de consulta
+                  Sesión de consulta
                 </h1>
                 <p className="mt-1 text-sm text-muted-foreground sm:text-base">
-                  Gestion integral de consulta medica asistida por IA.
+                  Gestión integral de consulta médica asistida por IA.
                 </p>
               </div>
 
@@ -122,7 +177,7 @@ export default function Session() {
                 <div className="animate-in slide-in-from-right-5 flex items-center gap-2 rounded-full border border-border/50 bg-muted/40 px-4 py-2">
                   <span className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
                   <span className="text-sm font-medium text-muted-foreground">
-                    Sesion activa:
+                    Sesión activa:
                     <span className="ml-1 font-mono text-foreground">{currentSessionId.substring(0, 8)}</span>
                   </span>
                 </div>
@@ -165,18 +220,16 @@ export default function Session() {
             </div>
 
             <div className="flex min-h-[600px] flex-col xl:col-span-7">
-              <Card className="relative flex h-full flex-col overflow-hidden border-none bg-card shadow-lg">
-                <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-primary via-secondary to-primary opacity-50" />
-
-                <CardHeader className="border-b bg-muted/10 pb-4">
+              <Card className="relative flex min-w-0 flex-col overflow-hidden border-border/70 bg-card shadow-sm">
+                <CardHeader className="border-b border-border/60 bg-background pb-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="space-y-1">
                       <CardTitle className="flex items-center gap-2 text-xl">
                         <Activity className="h-5 w-5 text-primary" />
-                        Historia clinica electronica
+                        Historia clínica electrónica
                       </CardTitle>
                       <CardDescription>
-                        Documentacion automatica estructurada basada en la transcripcion.
+                        Documentación automática estructurada basada en la transcripción.
                       </CardDescription>
                     </div>
                     {recordExists && (
@@ -188,14 +241,29 @@ export default function Session() {
                         Ficha existente
                       </Badge>
                     )}
+                    {anamnesisPhase?.estadoAnamnesis &&
+                      anamnesisPhase.estadoAnamnesis !== "no_iniciada" && (
+                        <Badge
+                          variant="outline"
+                          className="w-fit border-sky-200 bg-sky-50 text-sky-800"
+                          title={anamnesisPhase.motivoCierreAnamnesis || undefined}
+                        >
+                          <Activity className="mr-1 h-3 w-3" />
+                          {anamnesisPhaseLabels[anamnesisPhase.estadoAnamnesis] ||
+                            "Fase de anamnesis"}
+                          {anamnesisPhase.segmentoFinAnamnesis
+                            ? ` · seg. ${anamnesisPhase.segmentoFinAnamnesis}`
+                            : ""}
+                        </Badge>
+                      )}
                   </div>
                 </CardHeader>
 
-                <CardContent className="flex-1 overflow-y-auto bg-muted/5 p-0">
+                <CardContent className="min-w-0 flex-1 bg-muted/10 p-0">
                   {patientId && currentSessionId ? (
-                    <div className="mx-auto w-full max-w-4xl px-4 py-5 sm:px-6 sm:py-6">
+                    <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 sm:py-6">
                       {patientInfoProps && (
-                        <div className="mb-6">
+                          <div className="mb-4">
                           <PatientInfoCard
                             name={patientInfoProps.name}
                             age={patientInfoProps.age}
@@ -205,7 +273,7 @@ export default function Session() {
                         </div>
                       )}
 
-                      <div className="rounded-xl border bg-background p-1 shadow-sm">
+                      <div className="min-w-0 rounded-xl border border-border/70 bg-background px-4 shadow-sm sm:px-5">
                         <MedicalRecordContainer
                           formData={formData}
                           setFormData={setFormData}
@@ -214,6 +282,15 @@ export default function Session() {
                           showFullTranscription={showFullTranscription}
                           toggleTranscriptionView={toggleTranscriptionView}
                           handleChange={handleChange}
+                          sectionMeta={sectionMeta}
+                          recordSummary={recordSummary}
+                          onRecordSummaryChange={handleRecordSummaryChange}
+                          validationWarnings={validationWarnings}
+                          onAcceptSuggestion={handleAcceptSuggestion}
+                          onRejectSuggestion={handleRejectSuggestion}
+                          onBlockSection={handleBlockSection}
+                          onRetrySection={handleRetrySection}
+                          onRefineSection={handleRefineSection}
                           isSaving={isSaving}
                           isExporting={isExporting}
                           onClose={() => {}}
@@ -224,9 +301,11 @@ export default function Session() {
                             await handleExportPDF();
                           }}
                           refreshTranscription={refreshTranscription}
+                          refreshRecordData={refreshRecordData}
                           patientId={patientId}
                           sessionId={currentSessionId}
                           showCloseButton={false}
+                          showTranscriptionPanel={false}
                         />
                       </div>
                     </div>

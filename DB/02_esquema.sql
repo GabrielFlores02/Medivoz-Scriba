@@ -38,6 +38,14 @@ CREATE TYPE estado_consulta AS ENUM (
   'cancelada'
 );
 
+CREATE TYPE estado_fase_anamnesis AS ENUM (
+  'no_iniciada',
+  'en_anamnesis',
+  'probable_cierre',
+  'cerrada',
+  'reabierta'
+);
+
 CREATE TYPE tipo_consulta AS ENUM (
   'primera_consulta',
   'control',
@@ -191,13 +199,23 @@ CREATE TABLE perfiles_usuario (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   usuario_id uuid NOT NULL UNIQUE REFERENCES usuarios(id) ON DELETE CASCADE,
   nombre_completo text NOT NULL,
-  especialidad_id integer NOT NULL REFERENCES catalogo_especialidades(id),
+  especialidad_id integer REFERENCES catalogo_especialidades(id),
   url_avatar text,
   creado_en timestamptz NOT NULL DEFAULT now(),
   actualizado_en timestamptz NOT NULL DEFAULT now()
 );
 
-COMMENT ON TABLE perfiles_usuario IS 'Perfil visible del usuario: nombre completo y especialidad elegida desde catalogo.';
+COMMENT ON TABLE perfiles_usuario IS 'Perfil visible del usuario. La especialidad principal es opcional y se complementa con especialidades_usuario.';
+
+CREATE TABLE especialidades_usuario (
+  usuario_id uuid NOT NULL REFERENCES usuarios(id) ON DELETE CASCADE,
+  especialidad_id integer NOT NULL REFERENCES catalogo_especialidades(id) ON DELETE CASCADE,
+  es_principal boolean NOT NULL DEFAULT false,
+  creado_en timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (usuario_id, especialidad_id)
+);
+
+COMMENT ON TABLE especialidades_usuario IS 'Especialidades clínicas opcionales del médico; admite varias y una principal.';
 
 CREATE TABLE roles_usuario (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -272,6 +290,7 @@ CREATE TABLE consultas (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   doctor_id uuid NOT NULL REFERENCES usuarios(id) ON DELETE RESTRICT,
   paciente_id uuid NOT NULL REFERENCES pacientes(id) ON DELETE RESTRICT,
+  especialidad_id integer REFERENCES catalogo_especialidades(id) ON DELETE SET NULL,
   plantilla_anamnesis_id uuid REFERENCES plantillas_anamnesis(id) ON DELETE SET NULL,
   codigo_consulta varchar(40) NOT NULL UNIQUE,
   tipo_consulta tipo_consulta NOT NULL DEFAULT 'primera_consulta',
@@ -281,6 +300,12 @@ CREATE TABLE consultas (
   fin_real timestamptz,
   transcripcion_completa text,
   version_transcripcion integer NOT NULL DEFAULT 1 CHECK (version_transcripcion > 0),
+  estado_anamnesis estado_fase_anamnesis NOT NULL DEFAULT 'no_iniciada',
+  segmento_inicio_anamnesis integer,
+  segmento_fin_anamnesis integer,
+  confianza_cierre_anamnesis numeric(5,4),
+  motivo_cierre_anamnesis text,
+  anamnesis_detectada_en timestamptz,
   creado_en timestamptz NOT NULL DEFAULT now(),
   actualizado_en timestamptz NOT NULL DEFAULT now(),
   CONSTRAINT chk_consulta_fin_mayor_inicio
@@ -434,7 +459,7 @@ COMMENT ON TABLE versiones_prompt_doctor IS 'Prompts personalizados para un doct
 CREATE TABLE ejecuciones_agente (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   consulta_id uuid NOT NULL REFERENCES consultas(id) ON DELETE CASCADE,
-  agente_doctor_id uuid NOT NULL REFERENCES agentes_doctor(id) ON DELETE RESTRICT,
+  agente_doctor_id uuid REFERENCES agentes_doctor(id) ON DELETE SET NULL,
   version_prompt_plantilla_id uuid REFERENCES versiones_prompt_plantilla(id) ON DELETE SET NULL,
   version_prompt_doctor_id uuid REFERENCES versiones_prompt_doctor(id) ON DELETE SET NULL,
   tipo tipo_ejecucion NOT NULL,
@@ -447,6 +472,10 @@ CREATE TABLE ejecuciones_agente (
   entrada_json jsonb,
   salida_json jsonb,
   salida_texto text,
+  tokens_entrada integer CHECK (tokens_entrada IS NULL OR tokens_entrada >= 0),
+  tokens_salida integer CHECK (tokens_salida IS NULL OR tokens_salida >= 0),
+  tokens_total integer CHECK (tokens_total IS NULL OR tokens_total >= 0),
+  costo_estimado_usd numeric(10,6) CHECK (costo_estimado_usd IS NULL OR costo_estimado_usd >= 0),
   inicio_ejecucion timestamptz,
   fin_ejecucion timestamptz,
   latencia_ms integer CHECK (latencia_ms IS NULL OR latencia_ms >= 0),
@@ -479,6 +508,8 @@ CREATE TABLE fichas_medicas (
   consulta_id uuid NOT NULL UNIQUE REFERENCES consultas(id) ON DELETE CASCADE,
   plantilla_anamnesis_id uuid REFERENCES plantillas_anamnesis(id) ON DELETE SET NULL,
   estado estado_ficha NOT NULL DEFAULT 'vacia',
+  resumen_sugerido_ia text,
+  resumen_actual text,
   esta_finalizada boolean NOT NULL DEFAULT false,
   finalizada_en timestamptz,
   creado_en timestamptz NOT NULL DEFAULT now(),
@@ -498,8 +529,11 @@ CREATE TABLE secciones_ficha_medica (
   seccion nombre_seccion NOT NULL,
   texto_sugerido_ia text,
   texto_actual text,
+  resumen_sugerido_ia text,
+  resumen_actual text,
   estado estado_seccion NOT NULL DEFAULT 'vacia',
   confianza numeric(5,4) CHECK (confianza IS NULL OR (confianza >= 0 AND confianza <= 1)),
+  origen_dato varchar(40),
   ultimo_origen_actualizacion origen_actualizacion NOT NULL DEFAULT 'sistema',
   ultimo_usuario_id uuid REFERENCES usuarios(id) ON DELETE SET NULL,
   ultima_ejecucion_agente_id uuid REFERENCES ejecuciones_agente(id) ON DELETE SET NULL,
@@ -538,6 +572,10 @@ CREATE TABLE cambios_seccion_ficha (
   texto_anterior text,
   texto_nuevo text,
   texto_sugerido_ia text,
+  resumen_anterior text,
+  resumen_nuevo text,
+  resumen_sugerido_ia text,
+  origen_dato varchar(40),
   distancia_edicion numeric(6,4) CHECK (distancia_edicion IS NULL OR (distancia_edicion >= 0 AND distancia_edicion <= 1)),
   duracion_edicion_ms integer CHECK (duracion_edicion_ms IS NULL OR duracion_edicion_ms >= 0),
   confianza numeric(5,4) CHECK (confianza IS NULL OR (confianza >= 0 AND confianza <= 1)),
@@ -552,6 +590,7 @@ CREATE TABLE evidencias_seccion_ficha (
   segmento_transcripcion_id uuid REFERENCES segmentos_transcripcion(id) ON DELETE SET NULL,
   texto_evidencia text NOT NULL,
   confianza numeric(5,4) CHECK (confianza IS NULL OR (confianza >= 0 AND confianza <= 1)),
+  origen_dato varchar(40),
   creado_en timestamptz NOT NULL DEFAULT now()
 );
 
@@ -584,6 +623,13 @@ CREATE INDEX idx_sesiones_usuario_revocada_en
 CREATE INDEX idx_perfiles_usuario_especialidad_id
   ON perfiles_usuario (especialidad_id);
 
+CREATE INDEX idx_especialidades_usuario_usuario_id
+  ON especialidades_usuario (usuario_id);
+
+CREATE UNIQUE INDEX uq_especialidades_usuario_principal
+  ON especialidades_usuario (usuario_id)
+  WHERE es_principal = true;
+
 CREATE INDEX idx_roles_usuario_usuario_id
   ON roles_usuario (usuario_id);
 
@@ -602,6 +648,9 @@ CREATE INDEX idx_secciones_plantilla_anamnesis_activa
 
 CREATE INDEX idx_pacientes_doctor_id
   ON pacientes (doctor_id);
+
+CREATE INDEX idx_consultas_especialidad_id
+  ON consultas (especialidad_id);
 
 CREATE INDEX idx_pacientes_codigo_paciente
   ON pacientes (codigo_paciente);
@@ -623,6 +672,9 @@ CREATE INDEX idx_consultas_tipo_consulta
 
 CREATE INDEX idx_consultas_estado
   ON consultas (estado);
+
+CREATE INDEX idx_consultas_estado_anamnesis
+  ON consultas (estado_anamnesis);
 
 CREATE INDEX idx_consultas_fecha_hora_consulta
   ON consultas (fecha_hora_consulta);
@@ -896,6 +948,7 @@ COMMENT ON FUNCTION fn_revocar_sesiones_usuario(uuid) IS
 INSERT INTO catalogo_especialidades (nombre_especialidad, activa, es_administrativa) VALUES
 ('Administracion del sistema', true, true),
 ('Medicina general', true, false),
+('Hematologia', true, false),
 ('Neurologia', true, false),
 ('Pediatria', true, false),
 ('Cardiologia', true, false),
@@ -905,6 +958,7 @@ INSERT INTO catalogo_especialidades (nombre_especialidad, activa, es_administrat
 ('Traumatologia', true, false),
 ('Dermatologia', true, false),
 ('Endocrinologia', true, false),
+('Reumatologia', true, false),
 ('Otorrinolaringologia', true, false),
 ('Oftalmologia', true, false),
 ('Urologia', true, false),

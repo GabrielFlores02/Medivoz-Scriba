@@ -1,6 +1,11 @@
 import { and, desc, eq, ilike, or } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { consultations, patients } from "../../db/schema/clinical.js";
+import {
+  profiles,
+  specialities,
+  userSpecialities,
+} from "../../db/schema/auth.js";
+import { anamnesisTemplates, consultations, patients } from "../../db/schema/clinical.js";
 
 const buildConsultationCode = () => {
   const random = Math.random().toString(36).slice(2, 8).toUpperCase();
@@ -12,6 +17,11 @@ const normalizeQueryText = (value: unknown): string => {
   return value.trim();
 };
 
+const buildPatientCode = () => {
+  const random = Math.random().toString(36).slice(2, 10).toUpperCase();
+  return `PAC-${random}`.slice(0, 40);
+};
+
 export class ClinicalService {
   async listPatients(doctorId: string, query?: unknown) {
     const trimmedQuery = normalizeQueryText(query);
@@ -21,7 +31,8 @@ export class ClinicalService {
       conditions.push(
         or(
           ilike(patients.nombre, `%${trimmedQuery}%`),
-          ilike(patients.dni, `%${trimmedQuery}%`)
+          ilike(patients.dni, `%${trimmedQuery}%`),
+          ilike(patients.codigoPaciente, `%${trimmedQuery}%`)
         )!
       );
     }
@@ -42,13 +53,14 @@ export class ClinicalService {
   }
 
   async createPatient(doctorId: string, data: any) {
-    const dni = data.dni ?? data.identificacion;
-    if (!dni) throw new Error("El DNI del paciente es obligatorio");
+    const dni = normalizeQueryText(data.dni ?? data.identificacion) || null;
+    const codigoPaciente = normalizeQueryText(data.codigoPaciente) || buildPatientCode();
 
     const [newPatient] = await db
       .insert(patients)
       .values({
         doctorId,
+        codigoPaciente,
         nombre: data.nombre,
         dni,
         edad: data.edad ?? null,
@@ -68,7 +80,10 @@ export class ClinicalService {
 
     if (data.nombre !== undefined) updateValues.nombre = data.nombre;
     if (data.dni !== undefined || data.identificacion !== undefined) {
-      updateValues.dni = data.dni ?? data.identificacion;
+      updateValues.dni = normalizeQueryText(data.dni ?? data.identificacion) || null;
+    }
+    if (data.codigoPaciente !== undefined) {
+      updateValues.codigoPaciente = normalizeQueryText(data.codigoPaciente) || buildPatientCode();
     }
     if (data.edad !== undefined) updateValues.edad = data.edad;
     if (data.ocupacion !== undefined || data.metadata?.ocupacion !== undefined) {
@@ -123,13 +138,23 @@ export class ClinicalService {
 
   async createConsultation(doctorId: string, data: any) {
     await this.getPatientById(data.pacienteId, doctorId);
+    const especialidadId = await this.resolveConsultationSpecialityId(
+      doctorId,
+      data.especialidadId
+    );
+    const plantillaAnamnesisId =
+      data.plantillaAnamnesisId ??
+      (await this.getDefaultAnamnesisTemplateId(especialidadId));
 
     const [newConsultation] = await db
       .insert(consultations)
       .values({
         doctorId,
         pacienteId: data.pacienteId,
+        especialidadId,
+        plantillaAnamnesisId,
         codigoSesion: buildConsultationCode(),
+        tipoConsulta: data.tipoConsulta ?? "primera_consulta",
         estado: data.estado ?? "en_espera",
         fecha: data.fecha ? new Date(data.fecha) : new Date(),
       })
@@ -147,6 +172,10 @@ export class ClinicalService {
     };
 
     if (data.estado !== undefined) updateValues.estado = data.estado;
+    if (data.plantillaAnamnesisId !== undefined) {
+      updateValues.plantillaAnamnesisId = data.plantillaAnamnesisId || null;
+    }
+    if (data.tipoConsulta !== undefined) updateValues.tipoConsulta = data.tipoConsulta;
     if (data.fecha !== undefined) updateValues.fecha = data.fecha ? new Date(data.fecha) : null;
     if (data.inicioReal !== undefined) {
       updateValues.inicioReal = data.inicioReal ? new Date(data.inicioReal) : null;
@@ -174,6 +203,75 @@ export class ClinicalService {
     }
 
     return updated;
+  }
+
+  async resolveConsultationSpecialityId(
+    doctorId: string,
+    requestedSpecialityId?: number | null
+  ) {
+    if (requestedSpecialityId) {
+      const assigned = await db
+        .select({ id: userSpecialities.especialidadId })
+        .from(userSpecialities)
+        .innerJoin(
+          specialities,
+          eq(userSpecialities.especialidadId, specialities.id)
+        )
+        .where(
+          and(
+            eq(userSpecialities.userId, doctorId),
+            eq(userSpecialities.especialidadId, requestedSpecialityId),
+            eq(specialities.activa, true),
+            eq(specialities.esAdministrativa, false)
+          )
+        )
+        .limit(1);
+
+      if (!assigned[0]) {
+        throw new Error("La especialidad seleccionada no pertenece al perfil del médico");
+      }
+      return requestedSpecialityId;
+    }
+
+    const primary = await db
+      .select({ id: userSpecialities.especialidadId })
+      .from(userSpecialities)
+      .innerJoin(
+        specialities,
+        eq(userSpecialities.especialidadId, specialities.id)
+      )
+      .where(
+        and(
+          eq(userSpecialities.userId, doctorId),
+          eq(userSpecialities.esPrincipal, true),
+          eq(specialities.activa, true),
+          eq(specialities.esAdministrativa, false)
+        )
+      )
+      .limit(1);
+
+    if (primary[0]) return primary[0].id;
+
+    const profile = await db.query.profiles.findFirst({
+      columns: { especialidadId: true },
+      where: eq(profiles.userId, doctorId),
+    });
+    return profile?.especialidadId ?? null;
+  }
+
+  async getDefaultAnamnesisTemplateId(especialidadId: number | null) {
+    if (!especialidadId) return null;
+
+    const template = await db.query.anamnesisTemplates.findFirst({
+      columns: { id: true },
+      where: and(
+        eq(anamnesisTemplates.especialidadId, especialidadId),
+        eq(anamnesisTemplates.esActiva, true)
+      ),
+      orderBy: [desc(anamnesisTemplates.numeroVersion)],
+    });
+
+    return template?.id ?? null;
   }
 }
 

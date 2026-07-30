@@ -1,15 +1,21 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { Eye, EyeOff, Loader2, Lock, Mail, User } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail, RefreshCw, Star, Stethoscope, User } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AuthShell } from "@/components/auth/AuthShell";
 import api from "@/lib/api";
 import { logger } from "@/utils/logger";
 
 export function SignupForm() {
+  const [specialties, setSpecialties] = useState<Array<{ id: number; nombre: string }>>([]);
+  const [selectedSpecialtyIds, setSelectedSpecialtyIds] = useState<number[]>([]);
+  const [primarySpecialtyId, setPrimarySpecialtyId] = useState<number | null>(null);
+  const [isLoadingSpecialties, setIsLoadingSpecialties] = useState(true);
+  const [specialtiesError, setSpecialtiesError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,6 +24,43 @@ export function SignupForm() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+
+  const loadSpecialties = useCallback(async () => {
+    setIsLoadingSpecialties(true);
+    setSpecialtiesError(null);
+
+    try {
+      const response = await api.get("/auth/specialties");
+      const catalog = Array.isArray(response.data) ? response.data : [];
+      setSpecialties(catalog);
+      if (catalog.length === 0) {
+        setSpecialtiesError("No hay especialidades disponibles en este momento.");
+      }
+    } catch (error) {
+      logger.error("Error loading specialties:", error);
+      setSpecialtiesError("No se pudieron cargar las especialidades.");
+    } finally {
+      setIsLoadingSpecialties(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSpecialties();
+  }, [loadSpecialties]);
+
+  const toggleSpecialty = (id: number, checked: boolean) => {
+    setSelectedSpecialtyIds((current) => {
+      if (checked) {
+        const next = current.includes(id) ? current : [...current, id];
+        if (primarySpecialtyId === null) setPrimarySpecialtyId(id);
+        return next;
+      }
+
+      const next = current.filter((specialtyId) => specialtyId !== id);
+      if (primarySpecialtyId === id) setPrimarySpecialtyId(next[0] ?? null);
+      return next;
+    });
+  };
 
   const passwordStatus = useMemo(() => {
     if (!password) {
@@ -47,8 +90,8 @@ export function SignupForm() {
       return;
     }
 
-    if (password.length < 6) {
-      toast.error("La contrasena debe tener al menos 6 caracteres");
+    if (password.length < 8) {
+      toast.error("La contrasena debe tener al menos 8 caracteres");
       return;
     }
 
@@ -59,13 +102,17 @@ export function SignupForm() {
         email: email.trim().toLowerCase(),
         password,
         nombreCompleto: name.trim(),
+        especialidadIds: selectedSpecialtyIds,
+        especialidadPrincipalId: primarySpecialtyId || undefined,
       });
 
       toast.success("Registro completado. Ya puedes iniciar sesion.");
       navigate("/login");
-    } catch (err: any) {
+    } catch (err: unknown) {
       logger.error("Error during signup:", err);
-      const message = err.response?.data?.error || "No se pudo completar el registro";
+      const message =
+        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ||
+        "No se pudo completar el registro";
       toast.error(message);
     } finally {
       setIsLoading(false);
@@ -102,6 +149,85 @@ export function SignupForm() {
               required
             />
           </div>
+        </div>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-3">
+            <Label className="flex items-center gap-2 text-sm font-medium">
+              <Stethoscope className="h-4 w-4 text-primary" />
+              Especialidades
+            </Label>
+            <span className="text-xs text-muted-foreground">Opcional</span>
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Puedes elegir varias o continuar sin especialidad. Marca la estrella para definir cuál aparecerá seleccionada al grabar.
+          </p>
+          <div className="max-h-48 space-y-1 overflow-y-auto rounded-xl border border-border/70 bg-muted/15 p-2">
+            {isLoadingSpecialties ? (
+              <div className="flex items-center justify-center gap-2 py-6 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Cargando especialidades...
+              </div>
+            ) : specialtiesError ? (
+              <div className="flex flex-col items-center gap-3 px-3 py-5 text-center">
+                <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>{specialtiesError}</span>
+                </div>
+                <Button type="button" variant="outline" size="sm" onClick={loadSpecialties}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Reintentar
+                </Button>
+              </div>
+            ) : (
+              specialties.map((specialty) => {
+                const selected = selectedSpecialtyIds.includes(specialty.id);
+                const primary = primarySpecialtyId === specialty.id;
+                return (
+                  <div
+                    key={specialty.id}
+                    className={[
+                      "flex items-center gap-3 rounded-lg px-3 py-2 transition-colors",
+                      selected ? "bg-primary/8 text-foreground" : "hover:bg-muted/60",
+                    ].join(" ")}
+                  >
+                    <Checkbox
+                      id={`specialty-${specialty.id}`}
+                      checked={selected}
+                      onCheckedChange={(checked) => toggleSpecialty(specialty.id, checked === true)}
+                    />
+                    <Label
+                      htmlFor={`specialty-${specialty.id}`}
+                      className="min-w-0 flex-1 cursor-pointer text-sm font-normal"
+                    >
+                      {specialty.nombre}
+                    </Label>
+                    {selected && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className={[
+                          "h-8 w-8 shrink-0 rounded-full",
+                          primary ? "bg-primary/10 text-primary" : "text-muted-foreground",
+                        ].join(" ")}
+                        onClick={() => setPrimarySpecialtyId(specialty.id)}
+                        aria-label={`Usar ${specialty.nombre} como especialidad predeterminada`}
+                        title={primary ? "Especialidad predeterminada" : "Definir como predeterminada"}
+                      >
+                        <Star className={primary ? "h-4 w-4 fill-current" : "h-4 w-4"} />
+                      </Button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+          {selectedSpecialtyIds.length > 0 && (
+            <p className="text-xs font-medium text-primary">
+              {selectedSpecialtyIds.length} especialidad{selectedSpecialtyIds.length === 1 ? "" : "es"} seleccionada{selectedSpecialtyIds.length === 1 ? "" : "s"}
+            </p>
+          )}
         </div>
 
         <div className="space-y-2">

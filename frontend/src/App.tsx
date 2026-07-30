@@ -9,6 +9,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { AuthProvider } from "./contexts/AuthContext";
 import { PrivateRoute } from "./components/auth/PrivateRoute";
+import { AdminRoute } from "./components/auth/AdminRoute";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import ErrorBoundary from "./components/ErrorBoundary";
 
@@ -24,6 +25,9 @@ const Session = lazy(() => import("./pages/Session"));
 const SessionHistory = lazy(() => import("./pages/SessionHistory"));
 const Agents = lazy(() => import("./pages/Agents"));
 const AgentDetail = lazy(() => import("./pages/AgentDetail"));
+const StudyDashboard = lazy(() => import("./pages/StudyDashboard"));
+const StudySession = lazy(() => import("./pages/StudySession"));
+const StudyPending = lazy(() => import("./pages/StudyPending"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Loading fallback component with better UX
@@ -86,6 +90,12 @@ const App = () => {
                           <Route path="/history" element={<SessionHistory />} />
                           <Route path="/agents" element={<Agents />} />
                           <Route path="/agents/:id" element={<AgentDetail />} />
+                          <Route element={<AdminRoute />}>
+                            <Route path="/study" element={<StudyDashboard />} />
+                            <Route path="/study/new" element={<StudySession />} />
+                            <Route path="/study/pending" element={<StudyPending />} />
+                            <Route path="/study/consultations/:id" element={<StudySession />} />
+                          </Route>
                         </Route>
                         {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                         <Route path="*" element={<NotFound />} />

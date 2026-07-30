@@ -4,8 +4,11 @@ import { useMedicalRecordAutoFill } from "@/hooks/medical-record-auto-fill";
 import { TranscriptionPanel } from "./TranscriptionPanel";
 import { MedicalRecordForm } from "../medical-record/MedicalRecordForm";
 import { MedicalRecordActions } from "../medical-record/MedicalRecordActions";
-import { MedicalRecordFormData } from "@/hooks/medical-record/types";
+import { MedicalRecordFormData, RecordSummaryData, SectionMetaMap } from "@/hooks/medical-record/types";
 import { logger } from "@/utils/logger";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { LoaderCircle, Sparkles } from "lucide-react";
 
 interface MedicalRecordContainerProps {
   formData: MedicalRecordFormData;
@@ -15,15 +18,26 @@ interface MedicalRecordContainerProps {
   showFullTranscription: boolean;
   toggleTranscriptionView: () => void;
   handleChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => void;
+  sectionMeta?: SectionMetaMap;
+  recordSummary?: RecordSummaryData;
+  onRecordSummaryChange?: (value: string) => void;
+  validationWarnings?: string[];
+  onAcceptSuggestion?: (field: keyof MedicalRecordFormData) => Promise<boolean>;
+  onRejectSuggestion?: (field: keyof MedicalRecordFormData) => Promise<boolean>;
+  onBlockSection?: (field: keyof MedicalRecordFormData) => Promise<boolean>;
+  onRetrySection?: (field: keyof MedicalRecordFormData) => Promise<boolean>;
+  onRefineSection?: (field: keyof MedicalRecordFormData) => Promise<boolean>;
   isSaving: boolean;
   isExporting: boolean;
   onClose?: () => void;
   onSave: () => Promise<void>;
   onExport: () => Promise<void>;
   refreshTranscription: () => Promise<string>;
+  refreshRecordData?: () => Promise<void>;
   patientId?: string | null;
   sessionId?: string | null;
   showCloseButton?: boolean;
+  showTranscriptionPanel?: boolean;
 }
 
 export const MedicalRecordContainer = memo(function MedicalRecordContainer({
@@ -34,15 +48,26 @@ export const MedicalRecordContainer = memo(function MedicalRecordContainer({
   showFullTranscription,
   toggleTranscriptionView,
   handleChange,
+  sectionMeta,
+  recordSummary,
+  onRecordSummaryChange,
+  validationWarnings,
+  onAcceptSuggestion,
+  onRejectSuggestion,
+  onBlockSection,
+  onRetrySection,
+  onRefineSection,
   isSaving,
   isExporting,
   onClose,
   onSave,
   onExport,
   refreshTranscription,
+  refreshRecordData,
   patientId,
   sessionId,
-  showCloseButton = true
+  showCloseButton = true,
+  showTranscriptionPanel = true
 }: MedicalRecordContainerProps) {
   const [autoFilledOnce, setAutoFilledOnce] = useState(false);
   const autoFillAttempted = useRef(false);
@@ -67,14 +92,15 @@ export const MedicalRecordContainer = memo(function MedicalRecordContainer({
     }
     
     logger.log("Manual auto-fill triggered with transcription length:", fullTranscription.length);
-    const medicalRecordData = await autoFillMedicalRecord(fullTranscription);
+    const medicalRecordData = await autoFillMedicalRecord(fullTranscription, { consultaId: sessionId });
     
     if (medicalRecordData) {
       setFormData(medicalRecordData);
+      await refreshRecordData?.();
       setAutoFilledOnce(true);
       toast.success("Ficha médica auto-rellenada exitosamente");
     }
-  }, [autoFillMedicalRecord, fullTranscription, isAutoFilling, setFormData]);
+  }, [autoFillMedicalRecord, fullTranscription, isAutoFilling, refreshRecordData, setFormData, sessionId]);
 
   // Check if transcription is available, and if not, retry a few times
   const checkAndAutoFillWithRetry = useCallback(async () => {
@@ -99,9 +125,10 @@ export const MedicalRecordContainer = memo(function MedicalRecordContainer({
       // If we got a valid transcription from refresh, use it directly
       if (refreshedTranscription && refreshedTranscription.length > 50) {
         logger.log("Got valid transcription from refresh, proceeding with auto-fill");
-        const medicalRecordData = await autoFillMedicalRecord(refreshedTranscription);
+        const medicalRecordData = await autoFillMedicalRecord(refreshedTranscription, { consultaId: sessionId });
         if (medicalRecordData) {
           setFormData(medicalRecordData);
+          await refreshRecordData?.();
           setAutoFilledOnce(true);
           toast.success("Ficha médica auto-rellenada exitosamente");
         }
@@ -120,7 +147,7 @@ export const MedicalRecordContainer = memo(function MedicalRecordContainer({
       logger.log("Transcription not available after maximum retries, user can trigger manually");
       return false;
     }
-  }, [fullTranscription, handleAutoFill, refreshTranscription, autoFillMedicalRecord, setFormData]);
+  }, [fullTranscription, handleAutoFill, refreshTranscription, autoFillMedicalRecord, refreshRecordData, setFormData, sessionId]);
 
   // Track sessionId and transcription to detect when they change
   const previousSessionIdRef = useRef<string | null>(null);
@@ -176,9 +203,10 @@ export const MedicalRecordContainer = memo(function MedicalRecordContainer({
       // Small delay to ensure everything is ready, then auto-fill
       autoFillTimeoutRef.current = setTimeout(async () => {
         try {
-          const medicalRecordData = await autoFillMedicalRecord(fullTranscription);
+          const medicalRecordData = await autoFillMedicalRecord(fullTranscription, { consultaId: sessionId });
           if (medicalRecordData) {
             setFormData(medicalRecordData);
+            await refreshRecordData?.();
             setAutoFilledOnce(true);
             toast.success("Ficha médica auto-rellenada automáticamente");
           } else {
@@ -200,21 +228,60 @@ export const MedicalRecordContainer = memo(function MedicalRecordContainer({
         autoFillTimeoutRef.current = null;
       }
     };
-  }, [fullTranscription, sessionId, patientId, formData.motivo_consulta, autoFilledOnce, autoFillMedicalRecord, setFormData]);
+  }, [fullTranscription, sessionId, patientId, formData.motivo_consulta, autoFilledOnce, autoFillMedicalRecord, refreshRecordData, setFormData]);
 
   return (
     <>
-      <TranscriptionPanel 
-        transcriptionSnippet={transcriptionSnippet}
-        fullTranscription={fullTranscription}
-        showFullTranscription={showFullTranscription}
-        onToggleTranscription={toggleTranscriptionView}
-        onAutoFill={handleAutoFill}
-        isAutoFilling={isAutoFilling}
-      />
-
-      <div className="grid grid-cols-1 gap-6 py-4 mt-2">
-        <MedicalRecordForm formData={formData} onChange={handleChange} />
+      <div className={showTranscriptionPanel ? "grid grid-cols-1 gap-4 py-4 lg:grid-cols-[minmax(280px,0.85fr)_minmax(0,1.15fr)]" : "space-y-3 py-4"}>
+        {showTranscriptionPanel ? (
+          <div className="lg:sticky lg:top-0 lg:self-start">
+            <TranscriptionPanel
+              transcriptionSnippet={transcriptionSnippet}
+              fullTranscription={fullTranscription}
+              showFullTranscription={showFullTranscription}
+              onToggleTranscription={toggleTranscriptionView}
+              onAutoFill={handleAutoFill}
+              isAutoFilling={isAutoFilling}
+            />
+          </div>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-muted/20 px-3 py-2">
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Transcripcion</span>
+              <Badge variant="outline" className="bg-background">
+                {(fullTranscription?.length || 0).toLocaleString()} caracteres
+              </Badge>
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={handleAutoFill}
+              disabled={isAutoFilling || !fullTranscription}
+              className="h-8 px-2 text-xs"
+            >
+              {isAutoFilling ? (
+                <LoaderCircle className="mr-1 h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Sparkles className="mr-1 h-3.5 w-3.5" />
+              )}
+              Re-llenar
+            </Button>
+          </div>
+        )}
+        <MedicalRecordForm
+          formData={formData}
+          sectionMeta={sectionMeta}
+          recordSummary={recordSummary}
+          onRecordSummaryChange={onRecordSummaryChange}
+          validationWarnings={validationWarnings}
+          onChange={handleChange}
+          onAcceptSuggestion={onAcceptSuggestion}
+          onRejectSuggestion={onRejectSuggestion}
+          onBlockSection={onBlockSection}
+          onRetrySection={onRetrySection}
+          onRefineSection={onRefineSection}
+        />
       </div>
 
       <div className="flex flex-col sm:flex-row justify-between gap-2 mt-4">
@@ -237,11 +304,15 @@ export const MedicalRecordContainer = memo(function MedicalRecordContainer({
     prevProps.transcriptionSnippet === nextProps.transcriptionSnippet &&
     prevProps.fullTranscription === nextProps.fullTranscription &&
     prevProps.showFullTranscription === nextProps.showFullTranscription &&
+    prevProps.sectionMeta === nextProps.sectionMeta &&
+    prevProps.recordSummary === nextProps.recordSummary &&
+    prevProps.validationWarnings === nextProps.validationWarnings &&
     prevProps.isSaving === nextProps.isSaving &&
     prevProps.isExporting === nextProps.isExporting &&
     prevProps.patientId === nextProps.patientId &&
     prevProps.sessionId === nextProps.sessionId &&
-    prevProps.showCloseButton === nextProps.showCloseButton
+    prevProps.showCloseButton === nextProps.showCloseButton &&
+    prevProps.showTranscriptionPanel === nextProps.showTranscriptionPanel
     // Note: Callbacks (handleChange, toggleTranscriptionView, onSave, onExport, etc.)
     // should be memoized with useCallback in parent component
   );

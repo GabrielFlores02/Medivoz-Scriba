@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Cpu, History, Home, LogOut, Menu, Mic, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, Cpu, FlaskConical, History, Home, LogOut, Menu, Mic, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -28,12 +28,15 @@ export function Sidebar() {
   const navItems = useMemo(
     () => [
       { name: "Inicio", href: "/dashboard", icon: Home },
+      ...(user?.rol === "administrador"
+        ? [{ name: "Estudio 2.0", href: "/study", icon: FlaskConical }]
+        : []),
       { name: "Pacientes", href: "/patients", icon: Users },
       { name: "Consulta en vivo", href: "/session", icon: Mic },
       { name: "Historial", href: "/history", icon: History },
       { name: "Agentes IA", href: "/agents", icon: Cpu },
     ],
-    []
+    [user?.rol]
   );
 
   useEffect(() => {
@@ -73,7 +76,9 @@ export function Sidebar() {
   };
 
   const NavLink = ({ mobile = false, item }: { mobile?: boolean; item: (typeof navItems)[number] }) => {
-    const isActive = location.pathname === item.href;
+    const isActive =
+      location.pathname === item.href ||
+      (item.href === "/study" && location.pathname.startsWith("/study/"));
     const content = (
       <Link
         to={item.href}

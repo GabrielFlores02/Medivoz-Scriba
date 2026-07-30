@@ -3,11 +3,22 @@ import { toast } from "sonner";
 import { logger } from "@/utils/logger";
 import api from "@/lib/api";
 
-type User = {
+export type AuthSpecialty = {
+  id: number;
+  nombre: string;
+  esPrincipal: boolean;
+};
+
+export type AuthUser = {
   id: string;
   email: string;
   rol: string;
-} | null;
+  nombreCompleto?: string;
+  especialidades?: AuthSpecialty[];
+  especialidadPrincipal?: AuthSpecialty | null;
+};
+
+type User = AuthUser | null;
 
 type AuthContextType = {
   user: User;
@@ -33,15 +44,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       try {
-        // In a custom backend, we could have a /me endpoint
-        // For now, let's assume we decode the JWT or just trust the local storage user if simple
         const savedUser = localStorage.getItem('user');
         if (savedUser) {
           setUser(JSON.parse(savedUser));
-        } else {
-          // If no user object, try to refresh or fetch profile
-          // await api.get('/auth/me') ...
         }
+
+        const response = await api.get('/auth/me');
+        setUser(response.data);
+        localStorage.setItem('user', JSON.stringify(response.data));
       } catch (error) {
         logger.error("Auth check failed:", error);
       } finally {

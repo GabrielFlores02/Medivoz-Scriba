@@ -1,5 +1,5 @@
 import crypto from "crypto";
-import { and, desc, eq, gte, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNull } from "drizzle-orm";
 import { hashPassword, comparePassword } from "../../core/utils/hash.js";
 import { db } from "../../db/index.js";
 import {
@@ -8,8 +8,22 @@ import {
   sessions,
   userRoles,
   specialities,
+  userSpecialities,
 } from "../../db/schema/auth.js";
 import { RegisterInput, LoginInput } from "./auth.schema.js";
+import { STUDY_SPECIALTIES } from "../study/study.policy.js";
+
+const SPECIALITY_LABELS: Record<(typeof STUDY_SPECIALTIES)[number], string> = {
+  Hematologia: "Hematología",
+  Neurologia: "Neurología",
+  Psiquiatria: "Psiquiatría",
+  Reumatologia: "Reumatología",
+  Endocrinologia: "Endocrinología",
+};
+
+function getSpecialityLabel(name: string) {
+  return SPECIALITY_LABELS[name as keyof typeof SPECIALITY_LABELS] ?? name;
+}
 
 export class AuthService {
   private buildRotatingRefreshToken() {
@@ -25,7 +39,7 @@ export class AuthService {
     return { refreshToken, refreshTokenHash, expiresAt };
   }
 
-  private async resolveUserAuthPayload(userId: string) {
+  async getUserAuthPayload(userId: string) {
     const user = await db.query.users.findFirst({
       where: eq(users.id, userId),
     });
@@ -37,20 +51,84 @@ export class AuthService {
     const roles = await db.query.userRoles.findMany({
       where: eq(userRoles.userId, user.id),
     });
+    const profile = await db.query.profiles.findFirst({
+      where: eq(profiles.userId, user.id),
+    });
+    const specialityRows = await db
+      .select({
+        id: specialities.id,
+        nombre: specialities.nombre,
+        esPrincipal: userSpecialities.esPrincipal,
+      })
+      .from(userSpecialities)
+      .innerJoin(
+        specialities,
+        eq(userSpecialities.especialidadId, specialities.id)
+      )
+      .where(
+        and(
+          eq(userSpecialities.userId, user.id),
+          eq(specialities.activa, true),
+          eq(specialities.esAdministrativa, false),
+          inArray(specialities.nombre, [...STUDY_SPECIALTIES])
+        )
+      )
+      .orderBy(desc(userSpecialities.esPrincipal), asc(specialities.nombre));
+    const visibleSpecialityRows = specialityRows.map((item) => ({
+      ...item,
+      nombre: getSpecialityLabel(item.nombre),
+    }));
 
     const rol = roles.some((r) => r.rol === "administrador")
       ? "administrador"
-      : "doctor";
+      : roles.some((r) => r.rol === "coordinador")
+        ? "coordinador"
+        : "doctor";
 
     return {
       id: user.id,
       email: user.email,
       rol,
+      nombreCompleto: profile?.nombreCompleto ?? "",
+      especialidades: visibleSpecialityRows,
+      especialidadPrincipal:
+        visibleSpecialityRows.find((item) => item.esPrincipal) ??
+        visibleSpecialityRows[0] ??
+        null,
     };
   }
 
+  async listSelectableSpecialities() {
+    const rows = await db
+      .select({
+        id: specialities.id,
+        nombre: specialities.nombre,
+      })
+      .from(specialities)
+      .where(
+        and(
+          eq(specialities.activa, true),
+          eq(specialities.esAdministrativa, false),
+          inArray(specialities.nombre, [...STUDY_SPECIALTIES])
+        )
+      )
+      .orderBy(asc(specialities.nombre));
+
+    return rows.map((item) => ({
+      ...item,
+      nombre: getSpecialityLabel(item.nombre),
+    }));
+  }
+
   async register(input: RegisterInput) {
-    const { email, password, nombreCompleto, especialidadId } = input;
+    const {
+      email,
+      password,
+      nombreCompleto,
+      especialidadId,
+      especialidadIds,
+      especialidadPrincipalId,
+    } = input;
 
     const existing = await db.query.users.findFirst({
       where: eq(users.email, email),
@@ -61,6 +139,39 @@ export class AuthService {
     }
 
     const passwordHash = await hashPassword(password);
+    const legacySpecialityId =
+      typeof especialidadId === "string"
+        ? Number.parseInt(especialidadId, 10)
+        : especialidadId;
+    const requestedIds = Array.from(
+      new Set(
+        (especialidadIds ?? (legacySpecialityId ? [legacySpecialityId] : []))
+          .filter((id) => Number.isInteger(id) && id > 0)
+      )
+    );
+    const principalId = especialidadPrincipalId ?? requestedIds[0] ?? null;
+
+    if (principalId && !requestedIds.includes(principalId)) {
+      throw new Error("La especialidad principal debe estar seleccionada");
+    }
+
+    if (requestedIds.length > 0) {
+      const validSpecialities = await db
+        .select({ id: specialities.id })
+        .from(specialities)
+        .where(
+          and(
+            inArray(specialities.id, requestedIds),
+            eq(specialities.activa, true),
+            eq(specialities.esAdministrativa, false),
+            inArray(specialities.nombre, [...STUDY_SPECIALTIES])
+          )
+        );
+
+      if (validSpecialities.length !== requestedIds.length) {
+        throw new Error("Una o más especialidades no están disponibles");
+      }
+    }
 
     return await db.transaction(async (tx) => {
       const [newUser] = await tx
@@ -72,33 +183,21 @@ export class AuthService {
         })
         .returning();
 
-      let finalEspecialidadId =
-        typeof especialidadId === "string"
-          ? Number.parseInt(especialidadId, 10)
-          : especialidadId;
-      if (finalEspecialidadId && Number.isNaN(finalEspecialidadId)) {
-        finalEspecialidadId = undefined;
-      }
-      if (!finalEspecialidadId) {
-        const fallbackSpeciality = await tx.query.specialities.findFirst({
-          where: and(
-            eq(specialities.activa, true),
-            eq(specialities.esAdministrativa, false)
-          ),
-          orderBy: [desc(specialities.id)],
-        });
-
-        if (!fallbackSpeciality) {
-          throw new Error("No hay especialidades activas configuradas");
-        }
-        finalEspecialidadId = fallbackSpeciality.id;
-      }
-
       await tx.insert(profiles).values({
         userId: newUser.id,
         nombreCompleto,
-        especialidadId: finalEspecialidadId,
+        especialidadId: principalId,
       });
+
+      if (requestedIds.length > 0) {
+        await tx.insert(userSpecialities).values(
+          requestedIds.map((selectedId) => ({
+            userId: newUser.id,
+            especialidadId: selectedId,
+            esPrincipal: selectedId === principalId,
+          }))
+        );
+      }
 
       await tx.insert(userRoles).values({
         userId: newUser.id,
@@ -124,7 +223,7 @@ export class AuthService {
       throw new Error(`Tu cuenta esta ${user.estado}`);
     }
 
-    const authUser = await this.resolveUserAuthPayload(user.id);
+    const authUser = await this.getUserAuthPayload(user.id);
     const { refreshToken, refreshTokenHash, expiresAt } = this.buildRotatingRefreshToken();
 
     await db.insert(sessions).values({
@@ -201,7 +300,7 @@ export class AuthService {
       throw new Error("Sesion invalida o expirada");
     }
 
-    const user = await this.resolveUserAuthPayload(rotatedSession.userId);
+    const user = await this.getUserAuthPayload(rotatedSession.userId);
 
     return {
       user,

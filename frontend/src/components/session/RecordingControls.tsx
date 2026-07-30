@@ -14,8 +14,6 @@ interface RecordingControlsProps {
   sessionId: string;
   recordingTime: number;
   permissionDenied: boolean;
-  onRequestPermission: () => Promise<boolean>;
-  onGenerateSessionId: () => void;
   onStartRecording: () => void;
   onPauseRecording: () => void;
   onResumeRecording: () => void;
@@ -32,8 +30,6 @@ export function RecordingControls({
   sessionId,
   recordingTime,
   permissionDenied,
-  onRequestPermission,
-  onGenerateSessionId,
   onStartRecording,
   onPauseRecording,
   onResumeRecording,
@@ -47,10 +43,7 @@ export function RecordingControls({
         isTranscribing={isTranscribing}
         isPatientSelected={isPatientSelected}
         audioURL={audioURL}
-        sessionId={sessionId}
         permissionDenied={permissionDenied}
-        onRequestPermission={onRequestPermission}
-        onGenerateSessionId={onGenerateSessionId}
         onStartRecording={onStartRecording}
         onPauseRecording={onPauseRecording}
         onResumeRecording={onResumeRecording}

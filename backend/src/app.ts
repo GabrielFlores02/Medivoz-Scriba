@@ -5,6 +5,8 @@ import { env } from "./config/env.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { clinicalRoutes } from "./modules/clinical/clinical.routes.js";
 import { scribeRoutes } from "./modules/scribe/scribe.routes.js";
+import { agentsRoutes } from "./modules/agents/agents.routes.js";
+import { studyRoutes } from "./modules/study/study.routes.js";
 import { setupSockets } from "./socket/index.js";
 
 export async function buildApp() {
@@ -61,6 +63,8 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: "/api/v1/auth" });
   await app.register(clinicalRoutes, { prefix: "/api/v1/clinical" });
   await app.register(scribeRoutes, { prefix: "/api/v1/scribe" });
+  await app.register(agentsRoutes, { prefix: "/api/v1/agents" });
+  await app.register(studyRoutes, { prefix: "/api/v1/study" });
 
   setupSockets(app);
 

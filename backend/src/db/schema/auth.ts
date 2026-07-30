@@ -6,6 +6,7 @@ import {
   timestamp,
   boolean,
   integer,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 import { roleEnum, accountStatusEnum } from "./enums.js";
 
@@ -35,12 +36,24 @@ export const profiles = pgTable("perfiles_usuario", {
     .references(() => users.id, { onDelete: "cascade" }),
   nombreCompleto: text("nombre_completo").notNull(),
   especialidadId: integer("especialidad_id")
-    .notNull()
     .references(() => specialities.id),
   urlAvatar: text("url_avatar"),
   createdAt: timestamp("creado_en", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("actualizado_en", { withTimezone: true }).defaultNow().notNull(),
 });
+
+export const userSpecialities = pgTable("especialidades_usuario", {
+  userId: uuid("usuario_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  especialidadId: integer("especialidad_id")
+    .notNull()
+    .references(() => specialities.id, { onDelete: "cascade" }),
+  esPrincipal: boolean("es_principal").default(false).notNull(),
+  createdAt: timestamp("creado_en", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.userId, table.especialidadId] }),
+}));
 
 export const userRoles = pgTable("roles_usuario", {
   id: uuid("id").primaryKey().defaultRandom(),

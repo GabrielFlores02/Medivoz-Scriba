@@ -1,11 +1,13 @@
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Activity, Mic, Radio, Upload } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { logger } from "@/utils/logger";
+import { useAuth } from "@/contexts/AuthContext";
 import { RecordingControls } from "./session/RecordingControls";
 import { AudioFileUpload } from "./session/AudioFileUpload";
 import { useSessionRecorder } from "@/hooks/use-session-recorder";
@@ -26,10 +28,26 @@ export const SessionRecorder = memo(
     isPatientSelected,
     onSessionCreated,
   }: SessionRecorderProps) {
+    const { user } = useAuth();
     const [audioTranscription, setAudioTranscription] = useState<string>("");
     const [activeTab, setActiveTab] = useState<string>("record");
+    const [selectedSpecialtyId, setSelectedSpecialtyId] = useState<number | null>(null);
     const [isUploadTranscribing, setIsUploadTranscribing] = useState(false);
     const audioProcessingRef = useRef(false);
+    const specialties = useMemo(() => user?.especialidades || [], [user?.especialidades]);
+    const selectedSpecialty = useMemo(
+      () => specialties.find((specialty) => specialty.id === selectedSpecialtyId) ?? null,
+      [selectedSpecialtyId, specialties]
+    );
+
+    useEffect(() => {
+      setSelectedSpecialtyId((current) => {
+        if (current && specialties.some((specialty) => specialty.id === current)) {
+          return current;
+        }
+        return user?.especialidadPrincipal?.id ?? specialties[0]?.id ?? null;
+      });
+    }, [user, specialties]);
 
     const {
       sessionId,
@@ -41,6 +59,7 @@ export const SessionRecorder = memo(
       updateSessionWithTranscription,
     } = useSessionRecorder({
       patientId,
+      specialtyId: selectedSpecialtyId,
       isPatientSelected,
       onTranscriptionReady,
       onSessionCreated,
@@ -53,7 +72,6 @@ export const SessionRecorder = memo(
       audioURL,
       audioWaveform,
       permissionDenied,
-      requestPermission,
       startRecording: startAudioRecording,
       pauseRecording: pauseAudioRecording,
       resumeRecording: resumeAudioRecording,
@@ -86,11 +104,23 @@ export const SessionRecorder = memo(
       }
     }, [audioTranscription, onTranscriptionReady]);
 
-    const handleStartRecording = useCallback(() => {
+    const handleStartRecording = useCallback(async () => {
       audioProcessingRef.current = false;
-      startSessionRecording();
-      startAudioRecording();
-    }, [startSessionRecording, startAudioRecording]);
+      const preparedSession = dbSessionId && sessionId
+        ? { dbSessionId, sessionId }
+        : await generateSessionId();
+      if (!preparedSession) return;
+
+      const realtimeStarted = await startSessionRecording(preparedSession);
+      if (!realtimeStarted) return;
+      await startAudioRecording();
+    }, [
+      dbSessionId,
+      generateSessionId,
+      sessionId,
+      startAudioRecording,
+      startSessionRecording,
+    ]);
 
     const handlePauseRecording = useCallback(() => {
       if (isAudioRecording && !isAudioPaused) {
@@ -116,7 +146,7 @@ export const SessionRecorder = memo(
         await stopAudioRecording();
       }
 
-      stopSessionRecording();
+      await stopSessionRecording();
 
       setTimeout(async () => {
         try {
@@ -134,7 +164,7 @@ export const SessionRecorder = memo(
           audioProcessingRef.current = false;
         }
       }, 1500);
-    }, [isAudioRecording, stopAudioRecording, stopSessionRecording, transcribeAudio]);
+    }, [dbSessionId, isAudioRecording, stopAudioRecording, stopSessionRecording, transcribeAudio]);
 
     const handleFileUpload = useCallback(
       async (file: File) => {
@@ -240,20 +270,61 @@ export const SessionRecorder = memo(
             )}
           </div>
 
+          <div className="w-full rounded-xl border border-border/60 bg-muted/20 p-3">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">Especialidad de la consulta</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Se selecciona automáticamente la especialidad predeterminada de tu perfil.
+                </p>
+                <p className="mt-1 text-xs font-medium text-primary">
+                  {selectedSpecialty
+                    ? `Plantilla activa: Anamnesis base · ${selectedSpecialty.nombre}`
+                    : "Plantilla activa: Anamnesis clínica general"}
+                </p>
+              </div>
+              {specialties.length > 0 ? (
+                <Select
+                  value={selectedSpecialtyId ? String(selectedSpecialtyId) : undefined}
+                  onValueChange={(value) => setSelectedSpecialtyId(Number(value))}
+                  disabled={Boolean(sessionId) || isAudioRecording || isProcessing}
+                >
+                  <SelectTrigger className="w-full bg-background sm:w-56">
+                    <SelectValue placeholder="Elegir especialidad" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {specialties.map((specialty) => (
+                      <SelectItem key={specialty.id} value={String(specialty.id)}>
+                        {specialty.nombre}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Badge variant="outline" className="w-fit bg-background text-muted-foreground">
+                  Sin especialidad
+                </Badge>
+              )}
+            </div>
+          </div>
+
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="mb-6 grid w-full grid-cols-2 rounded-lg bg-muted/50 p-1.5">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Modo de entrada
+            </p>
+            <TabsList className="mb-5 grid w-full grid-cols-2 rounded-lg bg-muted/50 p-1">
               <TabsTrigger
                 value="record"
                 disabled={isProcessing || isAudioRecording}
-                className="text-sm font-semibold transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
+                className="text-sm font-semibold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm"
               >
                 <Mic className="mr-2 h-4 w-4" />
-                Grabar
+                Grabación en vivo
               </TabsTrigger>
               <TabsTrigger
                 value="upload"
                 disabled={isProcessing || isAudioRecording}
-                className="text-sm font-semibold transition-all duration-200 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md"
+                className="text-sm font-semibold data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm"
               >
                 <Upload className="mr-2 h-4 w-4" />
                 Subir Audio
@@ -272,8 +343,6 @@ export const SessionRecorder = memo(
                   sessionId={sessionId}
                   recordingTime={recordingTime}
                   permissionDenied={permissionDenied}
-                  onRequestPermission={requestPermission}
-                  onGenerateSessionId={generateSessionId}
                   onStartRecording={handleStartRecording}
                   onPauseRecording={handlePauseRecording}
                   onResumeRecording={handleResumeRecording}
