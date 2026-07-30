@@ -8,7 +8,6 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { logger } from "@/utils/logger";
-import { ThemeToggleButton } from "@/components/ThemeToggle";
 import { Logo } from "@/components/common/Logo";
 
 const DESKTOP_COLLAPSED_WIDTH = "4rem";
@@ -28,13 +27,15 @@ export function Sidebar() {
   const navItems = useMemo(
     () => [
       { name: "Inicio", href: "/dashboard", icon: Home },
-      ...(user?.rol === "administrador"
+      ...(["doctor", "administrador"].includes(user?.rol || "")
         ? [{ name: "Estudio 2.0", href: "/study", icon: FlaskConical }]
         : []),
       { name: "Pacientes", href: "/patients", icon: Users },
       { name: "Consulta en vivo", href: "/session", icon: Mic },
       { name: "Historial", href: "/history", icon: History },
-      { name: "Agentes IA", href: "/agents", icon: Cpu },
+      ...(user?.rol === "administrador"
+        ? [{ name: "Agentes IA", href: "/agents", icon: Cpu }]
+        : []),
     ],
     [user?.rol]
   );
@@ -116,7 +117,6 @@ export function Sidebar() {
         <div className="mx-auto flex h-14 max-w-screen-2xl items-center justify-between px-4">
           <Logo />
           <div className="flex items-center gap-1">
-            <ThemeToggleButton variant="ghost" size="sm" />
             <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
               <SheetTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-9 w-9 rounded-lg">
@@ -128,7 +128,6 @@ export function Sidebar() {
                 <div className="flex h-full flex-col bg-background">
                   <div className="flex h-14 items-center justify-between border-b border-border/60 px-4">
                     <Logo />
-                    <ThemeToggleButton variant="ghost" size="sm" />
                   </div>
 
                   <div className="flex-1 overflow-y-auto px-3 py-4">
@@ -170,7 +169,6 @@ export function Sidebar() {
       >
         <div className={cn("flex h-14 items-center border-b border-border/60", collapsed ? "justify-center px-2" : "justify-between px-4")}>
           <Logo collapsed={collapsed} />
-          {!collapsed && <ThemeToggleButton variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" />}
         </div>
 
         <div className="flex-1 overflow-y-auto px-2 py-4">
@@ -187,14 +185,6 @@ export function Sidebar() {
         </div>
 
         <div className="space-y-1 border-t border-border/60 p-2">
-          {collapsed && (
-            <ThemeToggleButton
-              variant="ghost"
-              size="icon"
-              className="h-9 w-full text-muted-foreground"
-            />
-          )}
-
           <Button
             variant="ghost"
             size="sm"

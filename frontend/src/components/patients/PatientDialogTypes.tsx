@@ -4,11 +4,8 @@ import * as z from "zod";
 // Define form validation schema
 export const patientFormSchema = z.object({
   nombre: z.string().min(2, { message: "El nombre debe tener al menos 2 caracteres" }),
-  dni: z.string().optional(),
-  edad: z.coerce.number().optional().nullable(),
-  ocupacion: z.string().optional(),
-  procedencia: z.string().optional(),
-  diagnostico: z.string().optional(),
+  dni: z.string().trim().regex(/^\d{8}$/, { message: "Ingrese un DNI válido de 8 dígitos" }),
+  edad: z.coerce.number().int().min(0, { message: "Ingrese una edad válida" }),
 });
 
 export type PatientFormValues = z.infer<typeof patientFormSchema>;

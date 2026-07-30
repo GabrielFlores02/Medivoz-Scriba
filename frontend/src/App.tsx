@@ -88,9 +88,9 @@ const App = () => {
                           <Route path="/patients" element={<Patients />} />
                           <Route path="/session" element={<Session />} />
                           <Route path="/history" element={<SessionHistory />} />
-                          <Route path="/agents" element={<Agents />} />
-                          <Route path="/agents/:id" element={<AgentDetail />} />
                           <Route element={<AdminRoute />}>
+                            <Route path="/agents" element={<Agents />} />
+                            <Route path="/agents/:id" element={<AgentDetail />} />
                             <Route path="/study" element={<StudyDashboard />} />
                             <Route path="/study/new" element={<StudySession />} />
                             <Route path="/study/pending" element={<StudyPending />} />

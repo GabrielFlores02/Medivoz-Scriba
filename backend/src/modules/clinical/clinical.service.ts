@@ -53,7 +53,7 @@ export class ClinicalService {
   }
 
   async createPatient(doctorId: string, data: any) {
-    const dni = normalizeQueryText(data.dni ?? data.identificacion) || null;
+    const dni = normalizeQueryText(data.dni) || null;
     const codigoPaciente = normalizeQueryText(data.codigoPaciente) || buildPatientCode();
 
     const [newPatient] = await db
@@ -64,9 +64,9 @@ export class ClinicalService {
         nombre: data.nombre,
         dni,
         edad: data.edad ?? null,
-        ocupacion: data.ocupacion ?? data.metadata?.ocupacion ?? null,
-        procedencia: data.procedencia ?? data.metadata?.procedencia ?? null,
-        diagnostico: data.diagnostico ?? data.metadata?.diagnostico ?? null,
+        ocupacion: null,
+        procedencia: null,
+        diagnostico: null,
       })
       .returning();
 
@@ -79,22 +79,13 @@ export class ClinicalService {
     };
 
     if (data.nombre !== undefined) updateValues.nombre = data.nombre;
-    if (data.dni !== undefined || data.identificacion !== undefined) {
-      updateValues.dni = normalizeQueryText(data.dni ?? data.identificacion) || null;
+    if (data.dni !== undefined) {
+      updateValues.dni = normalizeQueryText(data.dni) || null;
     }
     if (data.codigoPaciente !== undefined) {
       updateValues.codigoPaciente = normalizeQueryText(data.codigoPaciente) || buildPatientCode();
     }
     if (data.edad !== undefined) updateValues.edad = data.edad;
-    if (data.ocupacion !== undefined || data.metadata?.ocupacion !== undefined) {
-      updateValues.ocupacion = data.ocupacion ?? data.metadata?.ocupacion ?? null;
-    }
-    if (data.procedencia !== undefined || data.metadata?.procedencia !== undefined) {
-      updateValues.procedencia = data.procedencia ?? data.metadata?.procedencia ?? null;
-    }
-    if (data.diagnostico !== undefined || data.metadata?.diagnostico !== undefined) {
-      updateValues.diagnostico = data.diagnostico ?? data.metadata?.diagnostico ?? null;
-    }
 
     const [updated] = await db
       .update(patients)

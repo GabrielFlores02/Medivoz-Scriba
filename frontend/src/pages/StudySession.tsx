@@ -5,7 +5,6 @@ import {
   AlertCircle,
   Check,
   CheckCircle2,
-  Clipboard,
   Clock3,
   FileText,
   Headphones,
@@ -45,7 +44,6 @@ import {
   listClinicalPatients,
   queueStudyExtraction,
   recordStudyEvent,
-  registerCopyEvent,
   revealAiDraft,
   saveFinalAnamnesis,
   saveIndependentAnamnesis,
@@ -376,7 +374,7 @@ function WorkflowSteps({ consultation }: { consultation: StudyConsultation }) {
     ["Redactar independiente", Boolean(consultation.textos?.independienteGuardadaEn)],
     ["Ver borrador IA", Boolean(consultation.textos?.primeraVisualizacionIaEn)],
     ["Corregir", Boolean(consultation.textos?.correccionFinalizadaEn)],
-    ["Copiar a ESSI", consultation.estadoProtocolo === "completa"],
+    ["Validar anamnesis", consultation.estadoProtocolo === "completa"],
   ] as const;
   const usualSteps = [
     ["Preparar", true],
@@ -510,33 +508,11 @@ function ActiveConsultation({ consultation }: { consultation: StudyConsultation 
   );
 
   useEffect(() => {
-    const saved =
-      consultation.textos?.anamnesisIndependiente ||
-      localStorage.getItem(`medivoz-study-independent-${consultation.id}`) ||
-      "";
+    const saved = consultation.textos?.anamnesisIndependiente || "";
     setIndependentText(saved);
-    const finalSaved =
-      consultation.textos?.borradorIaCorregido ||
-      localStorage.getItem(`medivoz-study-final-${consultation.id}`) ||
-      "";
+    const finalSaved = consultation.textos?.borradorIaCorregido || "";
     if (finalSaved) setFinalText(finalSaved);
   }, [consultation.id, consultation.textos?.anamnesisIndependiente, consultation.textos?.borradorIaCorregido]);
-
-  useEffect(() => {
-    if (!independentText) return;
-    const timeout = window.setTimeout(() => {
-      localStorage.setItem(`medivoz-study-independent-${consultation.id}`, independentText);
-    }, 500);
-    return () => window.clearTimeout(timeout);
-  }, [consultation.id, independentText]);
-
-  useEffect(() => {
-    if (!finalText) return;
-    const timeout = window.setTimeout(() => {
-      localStorage.setItem(`medivoz-study-final-${consultation.id}`, finalText);
-    }, 500);
-    return () => window.clearTimeout(timeout);
-  }, [consultation.id, finalText]);
 
   useEffect(() => {
     const shouldPoll =
@@ -676,7 +652,6 @@ function ActiveConsultation({ consultation }: { consultation: StudyConsultation 
         await recordStudyEvent(consultation.id, "redaccion_independiente_inicio");
       }
       await saveIndependentAnamnesis(consultation.id, independentText);
-      localStorage.removeItem(`medivoz-study-independent-${consultation.id}`);
       toast.success("Anamnesis independiente guardada. La IA ya puede habilitarse.");
       refresh();
     } catch (error: unknown) {
@@ -700,23 +675,10 @@ function ActiveConsultation({ consultation }: { consultation: StudyConsultation 
     try {
       const result = await saveFinalAnamnesis(consultation.id, finalText);
       setFinalText(result.finalText);
-      localStorage.removeItem(`medivoz-study-final-${consultation.id}`);
       toast.success("Ficha final guardada y lista para ESSI");
       refresh();
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "No se pudo guardar la anamnesis final"));
-    }
-  };
-
-  const copyForEssi = async () => {
-    const text = consultation.textos?.borradorIaCorregido || finalText;
-    if (!text.trim()) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      await registerCopyEvent(consultation.id);
-      toast.success("Anamnesis copiada para ESSI");
-    } catch {
-      toast.error("No se pudo usar el portapapeles. Seleccione el texto manualmente.");
     }
   };
 
@@ -880,7 +842,7 @@ function ActiveConsultation({ consultation }: { consultation: StudyConsultation 
                     </CardTitle>
                     <p className="text-sm text-muted-foreground">
                       Redacte su propia anamnesis antes de ver cualquier sugerencia de IA.
-                      El editor conserva un borrador local automaticamente.
+                      El texto se conserva solo en memoria hasta que usted lo guarde.
                     </p>
                   </CardHeader>
                   <CardContent>
@@ -893,7 +855,7 @@ function ActiveConsultation({ consultation }: { consultation: StudyConsultation 
                     />
                     <div className="mt-3 flex items-center justify-between">
                       <span className="text-xs text-muted-foreground">
-                        {independentText.length} caracteres · autoguardado local
+                        {independentText.length} caracteres
                       </span>
                       <Button
                         disabled={independentText.trim().length < 20}
@@ -984,7 +946,7 @@ function ActiveConsultation({ consultation }: { consultation: StudyConsultation 
                           </span>
                           <Button disabled={finalText.trim().length < 20} onClick={saveFinal}>
                             <CheckCircle2 className="mr-2 h-4 w-4" />
-                            Guardar ficha final
+                            Validar anamnesis corregida
                           </Button>
                         </div>
                       </>
@@ -1002,7 +964,7 @@ function ActiveConsultation({ consultation }: { consultation: StudyConsultation 
                     Anamnesis final validada
                   </CardTitle>
                   <p className="text-sm text-muted-foreground">
-                    Texto plano listo para pegar en ESSI.
+                    Las tres versiones del estudio quedaron preservadas para trazabilidad y evaluación.
                   </p>
                 </CardHeader>
                 <CardContent>
@@ -1016,10 +978,6 @@ function ActiveConsultation({ consultation }: { consultation: StudyConsultation 
                     <Badge variant="secondary">
                       {consultation.correccionMismoDia ? "Corregida el mismo dia" : "Correccion cerrada"}
                     </Badge>
-                    <Button size="lg" onClick={copyForEssi}>
-                      <Clipboard className="mr-2 h-5 w-5" />
-                      Copiar para ESSI
-                    </Button>
                   </div>
                 </CardContent>
               </Card>

@@ -1,21 +1,10 @@
 import { z } from "zod";
 
-const patientMetadataSchema = z.object({
-  ocupacion: z.string().nullable().optional(),
-  procedencia: z.string().nullable().optional(),
-  diagnostico: z.string().nullable().optional(),
-}).optional();
-
 export const createPatientSchema = z.object({
   nombre: z.string().min(1),
-  dni: z.string().optional(),
-  identificacion: z.string().optional(),
+  dni: z.string().regex(/^\d{8}$/),
   codigoPaciente: z.string().optional(),
-  edad: z.number().int().nonnegative().nullable().optional(),
-  ocupacion: z.string().nullable().optional(),
-  procedencia: z.string().nullable().optional(),
-  diagnostico: z.string().nullable().optional(),
-  metadata: patientMetadataSchema,
+  edad: z.number().int().nonnegative(),
 });
 
 export const updatePatientSchema = createPatientSchema.partial();

@@ -45,9 +45,9 @@ const actorFrom = (request: any) => ({
 export async function studyRoutes(app: FastifyInstance) {
   app.addHook("onRequest", app.authenticate);
   app.addHook("preHandler", async (request, reply) => {
-    if (String((request.user as any).rol) !== "administrador") {
+    if (!["doctor", "administrador"].includes(String((request.user as any).rol))) {
       return reply.code(403).send({
-        error: "El módulo Estudio 2.0 está disponible solo para administradores",
+        error: "El módulo Estudio 2.0 está disponible solo para médicos y administradores",
       });
     }
   });

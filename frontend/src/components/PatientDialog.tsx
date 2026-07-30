@@ -46,10 +46,7 @@ export function PatientDialog({
     defaultValues: {
       nombre: "",
       dni: "",
-      edad: null,
-      ocupacion: "",
-      procedencia: "",
-      diagnostico: "",
+      edad: 0,
     },
   });
   
@@ -59,19 +56,13 @@ export function PatientDialog({
       form.reset({
         nombre: patient.nombre,
         dni: patient.dni || "",
-        edad: patient.edad,
-        ocupacion: patient.ocupacion || "",
-        procedencia: patient.procedencia || "",
-        diagnostico: patient.diagnostico || "",
+        edad: patient.edad ?? 0,
       });
     } else if (!isEditing) {
       form.reset({
         nombre: "",
         dni: "",
-        edad: null,
-        ocupacion: "",
-        procedencia: "",
-        diagnostico: "",
+        edad: 0,
       });
     }
   }, [isEditing, patient, form, open]);
@@ -121,7 +112,7 @@ export function PatientDialog({
           <DialogDescription>
             {isEditing 
               ? 'Actualice los datos del paciente seleccionado.'
-              : 'Complete los datos del paciente. Solo el nombre es obligatorio en fase 1.'
+              : 'Registre únicamente nombre completo, DNI y edad.'
             }
           </DialogDescription>
         </DialogHeader>
