@@ -13,8 +13,11 @@ import { PatientRecordModal } from "@/components/patients/PatientRecordModal";
 import { Patient, PatientDialogMode } from "@/components/patients/PatientDialogTypes";
 import api from "@/lib/api";
 import { logger } from "@/utils/logger";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Patients() {
+  const { user } = useAuth();
+  const canManage = user?.rol === "doctor";
   const [searchQuery, setSearchQuery] = useState("");
   const trimmedSearch = useMemo(() => searchQuery.trim(), [searchQuery]);
   const [debouncedSearchQuery] = useDebounce(trimmedSearch, 350);
@@ -106,7 +109,7 @@ export default function Patients() {
       <Sidebar />
       <div className="app-content flex-1 overflow-auto">
         <div className="container mx-auto px-4 py-7 md:px-6 md:py-8">
-          <PatientsHeader onCreateNewPatient={handleCreateNewPatient} />
+          <PatientsHeader onCreateNewPatient={handleCreateNewPatient} canManage={canManage} />
 
           <Card className="mb-8 border-border/60 shadow-sm">
             <CardHeader className="border-b border-border/40 bg-muted/20 pb-3">
@@ -120,6 +123,7 @@ export default function Patients() {
                 onEdit={handleEditPatient}
                 onDelete={handleDeletePatient}
                 onViewRecord={handleViewRecord}
+                canManage={canManage}
               />
             </CardContent>
           </Card>

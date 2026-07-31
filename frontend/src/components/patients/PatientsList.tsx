@@ -15,6 +15,7 @@ interface PatientsListProps {
   onEdit: (patient: Patient) => void;
   onDelete: (patient: Patient) => void;
   onViewRecord: (patient: Patient) => void;
+  canManage?: boolean;
 }
 
 export function PatientsList({
@@ -24,6 +25,7 @@ export function PatientsList({
   onEdit,
   onDelete,
   onViewRecord,
+  canManage = true,
 }: PatientsListProps) {
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "N/A";
@@ -84,9 +86,10 @@ export function PatientsList({
             age={patient.edad || 0}
             lastVisit={patient.ultima_visita ? formatDate(patient.ultima_visita) : "Sin visitas"}
             diagnosis={patient.diagnostico || undefined}
-            onEdit={() => onEdit(patient)}
-            onDelete={() => onDelete(patient)}
+            onEdit={canManage ? () => onEdit(patient) : undefined}
+            onDelete={canManage ? () => onDelete(patient) : undefined}
             onViewRecord={() => onViewRecord(patient)}
+            canManage={canManage}
           />
         ))}
       </div>
@@ -111,12 +114,9 @@ export function PatientsList({
                     <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
                       {patient.nombre.substring(0, 2).toUpperCase()}
                     </div>
-                    <Link
-                      to={`/session?patientId=${patient.id}`}
-                      className="font-semibold transition-colors hover:text-primary"
-                    >
+                    <span className="font-semibold">
                       {patient.nombre}
-                    </Link>
+                    </span>
                   </div>
                 </TableCell>
 
@@ -149,34 +149,36 @@ export function PatientsList({
                   </Button>
                 </TableCell>
                 <TableCell className="pr-4 text-right">
-                  <div className="flex justify-end gap-2 opacity-70 transition-opacity group-hover:opacity-100">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onEdit(patient);
-                      }}
-                      className="h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
-                      title="Editar paciente"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onDelete(patient);
-                      }}
-                      className="h-8 w-8 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
-                      title="Eliminar paciente"
-                    >
-                      <Trash className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  {canManage && (
+                    <div className="flex justify-end gap-2 opacity-70 transition-opacity group-hover:opacity-100">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onEdit(patient);
+                        }}
+                        className="h-8 w-8 text-muted-foreground hover:bg-muted hover:text-foreground"
+                        title="Editar paciente"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onDelete(patient);
+                        }}
+                        className="h-8 w-8 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                        title="Eliminar paciente"
+                      >
+                        <Trash className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

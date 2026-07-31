@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { MedicalRecordModal } from "@/components/MedicalRecordModal";
+import { PatientRecordModal } from "@/components/patients/PatientRecordModal";
 import { useAuth } from "@/contexts/AuthContext";
 import api from "@/lib/api";
 
@@ -217,14 +218,37 @@ export default function SessionHistory() {
             </div>
           )}
 
-          <MedicalRecordModal
-            open={!!selectedSession}
-            onOpenChange={(open) => {
-              if (!open) setSelectedSession(null);
-            }}
-            sessionId={selectedSession?.id}
-            patientId={selectedSession?.pacientes?.id}
-          />
+          {user?.rol === "administrador" ? (
+            <PatientRecordModal
+              open={!!selectedSession}
+              onOpenChange={(open) => {
+                if (!open) setSelectedSession(null);
+              }}
+              patient={
+                selectedSession
+                  ? {
+                      id: selectedSession.pacientes.id,
+                      nombre: selectedSession.pacientes.nombre,
+                      dni: selectedSession.pacientes.dni,
+                      codigoPaciente: selectedSession.pacientes.codigoPaciente ?? null,
+                      edad: selectedSession.pacientes.edad,
+                      ocupacion: null,
+                      procedencia: null,
+                      diagnostico: null,
+                    }
+                  : null
+              }
+            />
+          ) : (
+            <MedicalRecordModal
+              open={!!selectedSession}
+              onOpenChange={(open) => {
+                if (!open) setSelectedSession(null);
+              }}
+              sessionId={selectedSession?.id}
+              patientId={selectedSession?.pacientes?.id}
+            />
+          )}
         </div>
       </div>
     </div>

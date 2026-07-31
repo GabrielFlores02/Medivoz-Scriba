@@ -317,6 +317,7 @@ export async function scribeRoutes(app: FastifyInstance) {
   // GET /api/v1/scribe/record/:consultaId
   app.get("/record/:consultaId", async (request, reply) => {
     const doctorId = (request.user as any).sub;
+    const canViewAll = String((request.user as any).rol) === "administrador";
     const { consultaId } = request.params as any;
     try {
       logger.info("[scribe-route] record:get", { doctorId, consultaId });
@@ -324,7 +325,11 @@ export async function scribeRoutes(app: FastifyInstance) {
         userId: doctorId,
         role: String((request.user as any).rol || "doctor"),
       });
-      const record = await scribeService.getRecordByConsultationForDoctor(consultaId, doctorId);
+      const record = await scribeService.getRecordByConsultationForActor(
+        consultaId,
+        doctorId,
+        canViewAll
+      );
       if (!record) return reply.code(404).send({ error: "Ficha no encontrada" });
       return record;
     } catch (error: any) {
@@ -534,7 +539,7 @@ export async function scribeRoutes(app: FastifyInstance) {
           action,
         });
 
-        const record = await scribeService.getRecordByConsultationForDoctor(consultaId, doctorId);
+        const record = await scribeService.getRecordByConsultationForActor(consultaId, doctorId);
         if (!record) return reply.code(404).send({ error: "Ficha no encontrada" });
 
         const section = (record.sections || []).find((item: any) => item.nombre === nombre);

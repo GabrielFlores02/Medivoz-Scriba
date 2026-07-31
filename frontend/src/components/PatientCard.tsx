@@ -13,6 +13,7 @@ interface PatientCardProps {
   onEdit?: () => void;
   onDelete?: () => void;
   onViewRecord?: () => void;
+  canManage?: boolean;
 }
 
 export const PatientCard = memo(function PatientCard({
@@ -24,6 +25,7 @@ export const PatientCard = memo(function PatientCard({
   onEdit,
   onDelete,
   onViewRecord,
+  canManage = true,
 }: PatientCardProps) {
   return (
     <Card className="overflow-hidden border-border/50 shadow-sm transition-shadow hover:shadow-md dark:border-muted/20">
@@ -82,11 +84,13 @@ export const PatientCard = memo(function PatientCard({
           </div>
         </div>
 
-        <Link to={`/session?patientId=${id}`} className="w-full">
-          <Button size="sm" variant="outline" className="w-full">
-            Nueva sesion
-          </Button>
-        </Link>
+        {canManage && (
+          <Link to={`/session?patientId=${id}`} className="w-full">
+            <Button size="sm" variant="outline" className="w-full">
+              Nueva sesion
+            </Button>
+          </Link>
+        )}
 
         {onViewRecord && (
           <Button

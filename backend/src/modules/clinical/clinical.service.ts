@@ -23,9 +23,9 @@ const buildPatientCode = () => {
 };
 
 export class ClinicalService {
-  async listPatients(doctorId: string, query?: unknown) {
+  async listPatients(actorId: string, query?: unknown, canViewAll = false) {
     const trimmedQuery = normalizeQueryText(query);
-    const conditions = [eq(patients.doctorId, doctorId)];
+    const conditions = canViewAll ? [] : [eq(patients.doctorId, actorId)];
 
     if (trimmedQuery) {
       conditions.push(
@@ -38,14 +38,16 @@ export class ClinicalService {
     }
 
     return await db.query.patients.findMany({
-      where: and(...conditions),
+      where: conditions.length ? and(...conditions) : undefined,
       orderBy: [desc(patients.createdAt)],
     });
   }
 
-  async getPatientById(id: string, doctorId: string) {
+  async getPatientById(id: string, actorId: string, canViewAll = false) {
     const patient = await db.query.patients.findFirst({
-      where: and(eq(patients.id, id), eq(patients.doctorId, doctorId)),
+      where: canViewAll
+        ? eq(patients.id, id)
+        : and(eq(patients.id, id), eq(patients.doctorId, actorId)),
     });
 
     if (!patient) throw new Error("Paciente no encontrado");
@@ -107,20 +109,22 @@ export class ClinicalService {
     return deleted;
   }
 
-  async listConsultations(doctorId: string, pacienteId?: unknown) {
-    const conditions = [eq(consultations.doctorId, doctorId)];
+  async listConsultations(actorId: string, pacienteId?: unknown, canViewAll = false) {
+    const conditions = canViewAll ? [] : [eq(consultations.doctorId, actorId)];
     const safePacienteId = normalizeQueryText(pacienteId);
     if (safePacienteId) conditions.push(eq(consultations.pacienteId, safePacienteId));
 
     return await db.query.consultations.findMany({
-      where: and(...conditions),
+      where: conditions.length ? and(...conditions) : undefined,
       orderBy: [desc(consultations.fecha)],
     });
   }
 
-  async getConsultationById(id: string, doctorId: string) {
+  async getConsultationById(id: string, actorId: string, canViewAll = false) {
     const consultation = await db.query.consultations.findFirst({
-      where: and(eq(consultations.id, id), eq(consultations.doctorId, doctorId)),
+      where: canViewAll
+        ? eq(consultations.id, id)
+        : and(eq(consultations.id, id), eq(consultations.doctorId, actorId)),
     });
 
     if (!consultation) throw new Error("Consulta no encontrada");

@@ -22,16 +22,18 @@ export async function clinicalRoutes(app: FastifyInstance) {
   // --- Patients ---
 
   app.get("/patients", async (request) => {
-    const doctorId = (request.user as any).sub;
+    const actorId = (request.user as any).sub;
+    const canViewAll = String((request.user as any).rol) === "administrador";
     const { search } = request.query as any;
-    return await clinicalService.listPatients(doctorId, search);
+    return await clinicalService.listPatients(actorId, search, canViewAll);
   });
 
   app.get("/patients/:id", async (request, reply) => {
-    const doctorId = (request.user as any).sub;
+    const actorId = (request.user as any).sub;
+    const canViewAll = String((request.user as any).rol) === "administrador";
     const { id } = request.params as any;
     try {
-      return await clinicalService.getPatientById(id, doctorId);
+      return await clinicalService.getPatientById(id, actorId, canViewAll);
     } catch (error: any) {
       return reply.code(404).send({ error: error.message });
     }
@@ -83,16 +85,18 @@ export async function clinicalRoutes(app: FastifyInstance) {
   // --- Consultations ---
 
   app.get("/consultations", async (request) => {
-    const doctorId = (request.user as any).sub;
+    const actorId = (request.user as any).sub;
+    const canViewAll = String((request.user as any).rol) === "administrador";
     const { pacienteId } = request.query as any;
-    return await clinicalService.listConsultations(doctorId, pacienteId);
+    return await clinicalService.listConsultations(actorId, pacienteId, canViewAll);
   });
 
   app.get("/consultations/:id", async (request, reply) => {
-    const doctorId = (request.user as any).sub;
+    const actorId = (request.user as any).sub;
+    const canViewAll = String((request.user as any).rol) === "administrador";
     const { id } = request.params as any;
     try {
-      return await clinicalService.getConsultationById(id, doctorId);
+      return await clinicalService.getConsultationById(id, actorId, canViewAll);
     } catch (error: any) {
       return reply.code(404).send({ error: error.message });
     }

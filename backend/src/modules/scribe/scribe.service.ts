@@ -230,13 +230,19 @@ export class ScribeService {
     });
   }
 
-  async getRecordByConsultationForDoctor(consultaId: string, doctorId: string) {
+  async getRecordByConsultationForActor(
+    consultaId: string,
+    actorId: string,
+    canViewAll = false
+  ) {
     const consultation = await db.query.consultations.findFirst({
-      where: and(eq(consultations.id, consultaId), eq(consultations.doctorId, doctorId)),
+      where: canViewAll
+        ? eq(consultations.id, consultaId)
+        : and(eq(consultations.id, consultaId), eq(consultations.doctorId, actorId)),
     });
 
     if (!consultation) {
-      logger.warn("[scribe] record:get:not-authorized", { consultaId, doctorId });
+      logger.warn("[scribe] record:get:not-authorized", { consultaId, actorId, canViewAll });
       return null;
     }
     return this.getRecordContent(consultaId);
