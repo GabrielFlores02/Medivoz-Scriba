@@ -1,38 +1,25 @@
-import { ClipboardCheck, FileText, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
+import { ClipboardCheck, ShieldCheck } from "lucide-react";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import api from "@/lib/api";
+
+const criteria = ["Exactitud", "Completitud", "Claridad", "Utilidad", "Organización", "Objetividad", "Consistencia", "Lenguaje profesional", "Pertinencia"];
+const keys = ["exactitud", "completitud", "claridad", "utilidad", "organizacion", "objetividad", "consistencia", "lenguaje_profesional", "pertinencia"];
+type Assignment = { id: string; estado: string; documents: { id: string; label: string; text: string }[]; completedDocuments: string[] };
 
 export default function EvaluatorDashboard() {
-  return (
-    <div className="flex min-h-screen bg-background">
-      <Sidebar />
-      <main className="app-content flex-1 overflow-auto">
-        <div className="mx-auto max-w-5xl px-4 py-7 md:px-8">
-          <header className="mb-7 rounded-2xl border border-border bg-card p-6 shadow-sm">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.15em] text-primary">
-              Evaluación documental independiente
-            </p>
-            <h1 className="text-2xl font-bold">Panel del Evaluador</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Solo se mostrarán documentos pseudonimizados asignados para evaluación PDQI-9.
-            </p>
-          </header>
-          <div className="grid gap-5 md:grid-cols-3">
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><ClipboardCheck className="h-5 w-5 text-primary" />Asignaciones</CardTitle></CardHeader>
-              <CardContent className="text-sm text-muted-foreground">No hay evaluaciones asignadas todavía.</CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><FileText className="h-5 w-5 text-primary" />PDQI-9</CardTitle></CardHeader>
-              <CardContent className="text-sm text-muted-foreground">La calificación se habilitará solo cuando el administrador asigne documentos A, B y C.</CardContent>
-            </Card>
-            <Card>
-              <CardHeader><CardTitle className="flex items-center gap-2 text-base"><ShieldCheck className="h-5 w-5 text-primary" />Confidencialidad</CardTitle></CardHeader>
-              <CardContent className="text-sm text-muted-foreground">No se exponen pacientes, DNI, médicos tratantes, audios ni transcripciones originales.</CardContent>
-            </Card>
-          </div>
-        </div>
-      </main>
-    </div>
-  );
+  const [assignments, setAssignments] = useState<Assignment[]>([]); const [selected, setSelected] = useState<Assignment | null>(null); const [documentId, setDocumentId] = useState(""); const [scores, setScores] = useState<Record<string, number>>({}); const [observations, setObservations] = useState("");
+  const load = async () => { try { const response = await api.get("/evaluations/my-assignments"); setAssignments(response.data); } catch { toast.error("No se pudieron cargar las asignaciones"); } };
+  useEffect(() => { void load(); }, []);
+  const open = (assignment: Assignment) => { setSelected(assignment); const doc = assignment.documents[0]; setDocumentId(doc?.id || ""); setScores({}); setObservations(""); };
+  const submit = async () => { if (!selected || Object.keys(scores).length !== 9) return toast.warning("Califique los 9 criterios antes de enviar."); try { await api.post(`/evaluations/assignments/${selected.id}/scores`, { documentoId: documentId, puntajes: scores, observaciones }); toast.success("Calificación guardada."); await load(); } catch (error: any) { toast.error(error?.response?.data?.error || "No se pudo guardar"); } };
+  const current = selected?.documents.find((item) => item.id === documentId);
+  return <div className="flex min-h-screen bg-background"><Sidebar /><main className="app-content flex-1 overflow-auto"><div className="mx-auto max-w-5xl px-4 py-7 md:px-8">
+    <header className="mb-7 rounded-2xl border bg-card p-6 shadow-sm"><p className="text-xs font-semibold uppercase tracking-[.15em] text-primary">Evaluación documental independiente</p><h1 className="mt-2 text-2xl font-bold">Panel del Evaluador</h1><p className="mt-2 text-sm text-muted-foreground">Califique únicamente los documentos pseudonimizados asignados. No se muestran pacientes, médicos, audios ni transcripciones.</p></header>
+    {!selected ? <div className="grid gap-4 md:grid-cols-2">{assignments.length ? assignments.map((item) => <Card key={item.id}><CardHeader><CardTitle className="flex items-center gap-2 text-base"><ClipboardCheck className="h-5 w-5 text-primary" />Asignación PDQI-9</CardTitle></CardHeader><CardContent><p className="mb-4 text-sm text-muted-foreground">Estado: {item.estado}. Documentos calificados: {item.completedDocuments.length}/3.</p><Button onClick={() => open(item)}>Abrir evaluación</Button></CardContent></Card>) : <Card><CardContent className="p-8 text-sm text-muted-foreground">No hay evaluaciones asignadas todavía.</CardContent></Card>}<Card><CardContent className="flex gap-3 p-6 text-sm text-muted-foreground"><ShieldCheck className="h-5 w-5 shrink-0 text-primary" />La evaluación es ciega: las etiquetas Documento A, B y C no revelan su origen.</CardContent></Card></div> : <div className="grid gap-5 lg:grid-cols-[1.1fr_.9fr]"><Card><CardHeader><div className="flex flex-wrap gap-2">{selected.documents.map((doc) => <Button key={doc.id} variant={doc.id === documentId ? "default" : "outline"} onClick={() => { setDocumentId(doc.id); setScores({}); setObservations(""); }}>{doc.label}{selected.completedDocuments.includes(doc.id) ? " ✓" : ""}</Button>)}</div></CardHeader><CardContent><p className="whitespace-pre-wrap text-sm leading-7">{current?.text}</p></CardContent></Card><Card><CardHeader><CardTitle>PDQI-9 · escala 1 a 5</CardTitle></CardHeader><CardContent className="space-y-3">{criteria.map((criterion, index) => <div key={keys[index]} className="flex items-center justify-between gap-3"><span className="text-sm">{index + 1}. {criterion}</span><select className="h-9 rounded-md border bg-background px-2" value={scores[keys[index]] || ""} onChange={(e) => setScores((old) => ({ ...old, [keys[index]]: Number(e.target.value) }))}><option value="">—</option>{[1,2,3,4,5].map((value) => <option key={value} value={value}>{value}</option>)}</select></div>)}<Textarea placeholder="Observaciones opcionales" value={observations} onChange={(e) => setObservations(e.target.value)} /><div className="flex gap-2"><Button variant="outline" onClick={() => setSelected(null)}>Volver</Button><Button onClick={submit}>Guardar calificación</Button></div></CardContent></Card></div>}
+  </div></main></div>;
 }

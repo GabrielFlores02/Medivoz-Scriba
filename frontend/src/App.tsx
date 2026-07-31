@@ -30,6 +30,7 @@ const StudyDashboard = lazy(() => import("./pages/StudyDashboard"));
 const StudySession = lazy(() => import("./pages/StudySession"));
 const StudyPending = lazy(() => import("./pages/StudyPending"));
 const EvaluatorDashboard = lazy(() => import("./pages/EvaluatorDashboard"));
+const EvaluationManagement = lazy(() => import("./pages/EvaluationManagement"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 // Loading fallback component with better UX
@@ -98,6 +99,7 @@ const App = () => {
                             <Route path="/study/consultations/:id" element={<StudySession />} />
                           </Route>
                           <Route element={<AdminRoute />}>
+                            <Route path="/evaluations/manage" element={<EvaluationManagement />} />
                             <Route path="/agents" element={<Agents />} />
                             <Route path="/agents/:id" element={<AgentDetail />} />
                           </Route>

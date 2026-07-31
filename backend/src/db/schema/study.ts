@@ -140,6 +140,62 @@ export const studyAuditEvents = pgTable("auditoria_estudio", {
     .on(table.consultaEstudioId, table.accion),
 }));
 
+// Los textos mostrados al evaluador se guardan como una copia pseudonimizada.
+// Nunca se consulta la historia clínica original desde el módulo de evaluación.
+export const pdqiAssignments = pgTable("asignaciones_pdqi9", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  consultaEstudioId: uuid("consulta_estudio_id")
+    .notNull()
+    .references(() => studyConsultations.id, { onDelete: "cascade" }),
+  evaluadorId: uuid("evaluador_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  asignadaPorId: uuid("asignada_por_id")
+    .references(() => users.id, { onDelete: "set null" }),
+  estado: varchar("estado", { length: 24 }).default("asignada").notNull(),
+  createdAt: timestamp("creado_en", { withTimezone: true }).defaultNow().notNull(),
+  completedAt: timestamp("completada_en", { withTimezone: true }),
+}, (table) => ({
+  consultationEvaluator: uniqueIndex("uq_pdqi9_consulta_evaluador")
+    .on(table.consultaEstudioId, table.evaluadorId),
+  evaluatorState: index("idx_pdqi9_evaluador_estado").on(table.evaluadorId, table.estado),
+}));
+
+export const pdqiDocuments = pgTable("documentos_pdqi9", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  asignacionId: uuid("asignacion_id")
+    .notNull()
+    .references(() => pdqiAssignments.id, { onDelete: "cascade" }),
+  etiquetaCiega: varchar("etiqueta_ciega", { length: 24 }).notNull(),
+  orden: integer("orden").notNull(),
+  textoPseudonimizado: text("texto_pseudonimizado").notNull(),
+  origenInterno: varchar("origen_interno", { length: 24 }).notNull(),
+  createdAt: timestamp("creado_en", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  assignmentLabel: uniqueIndex("uq_pdqi9_documento_etiqueta")
+    .on(table.asignacionId, table.etiquetaCiega),
+}));
+
+export const pdqiScores = pgTable("calificaciones_pdqi9", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  asignacionId: uuid("asignacion_id")
+    .notNull()
+    .references(() => pdqiAssignments.id, { onDelete: "cascade" }),
+  documentoId: uuid("documento_id")
+    .notNull()
+    .references(() => pdqiDocuments.id, { onDelete: "cascade" }),
+  evaluadorId: uuid("evaluador_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "restrict" }),
+  puntajes: jsonb("puntajes").notNull(),
+  puntajeTotal: integer("puntaje_total").notNull(),
+  observaciones: text("observaciones"),
+  submittedAt: timestamp("enviado_en", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  assignmentDocument: uniqueIndex("uq_pdqi9_calificacion_documento")
+    .on(table.asignacionId, table.documentoId),
+}));
+
 export const specialtyDictionaries = pgTable("diccionarios_especialidad", {
   id: uuid("id").primaryKey().defaultRandom(),
   especialidad: varchar("especialidad", { length: 80 }).notNull(),

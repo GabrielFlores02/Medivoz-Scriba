@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Cpu, FlaskConical, History, Home, LogOut, Menu, Mic, Users } from "lucide-react";
+import { ChevronLeft, ChevronRight, ClipboardCheck, Cpu, FlaskConical, History, Home, LogOut, Menu, Mic, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -41,7 +41,7 @@ export function Sidebar() {
       { name: "Consulta en vivo", href: "/session", icon: Mic },
       { name: "Historial", href: "/history", icon: History },
       ...(user?.rol === "administrador"
-        ? [{ name: "Agentes IA", href: "/agents", icon: Cpu }]
+        ? [{ name: "Asignaciones PDQI-9", href: "/evaluations/manage", icon: ClipboardCheck }, { name: "Agentes IA", href: "/agents", icon: Cpu }]
         : []),
     ];
   }, [user?.rol]);
