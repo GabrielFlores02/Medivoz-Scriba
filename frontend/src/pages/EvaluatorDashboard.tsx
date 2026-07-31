@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import api from "@/lib/api";
 
-const criteria = ["Exactitud", "Completitud", "Claridad", "Utilidad", "Organización", "Objetividad", "Consistencia", "Lenguaje profesional", "Pertinencia"];
-const keys = ["exactitud", "completitud", "claridad", "utilidad", "organizacion", "objetividad", "consistencia", "lenguaje_profesional", "pertinencia"];
+const criteria = ["Organizado", "Comprensible", "Sucinto", "Interpretado", "Internamente coherente", "Preciso", "Completo", "Útil", "Actualizado"];
+const keys = ["organizacion", "comprensibilidad", "concicion", "interpretacion_sintesis", "coherencia_interna", "precision", "completitud", "utilidad", "actualizacion"];
 type Assignment = { id: string; estado: string; documents: { id: string; label: string; text: string }[]; completedDocuments: string[] };
 
 export default function EvaluatorDashboard() {

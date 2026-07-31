@@ -11,8 +11,8 @@ import {
 } from "../../db/schema/study.js";
 
 export const PDQI9_CRITERIA = [
-  "exactitud", "completitud", "claridad", "utilidad", "organizacion",
-  "objetividad", "consistencia", "lenguaje_profesional", "pertinencia",
+  "organizacion", "comprensibilidad", "concicion", "interpretacion_sintesis",
+  "coherencia_interna", "precision", "completitud", "utilidad", "actualizacion",
 ] as const;
 
 const cleanText = (text: string, name?: string | null, dni?: string | null) => {
