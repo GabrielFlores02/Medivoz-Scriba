@@ -133,6 +133,29 @@ const inferSections = (text: string): SectionName[] => {
   return inferred;
 };
 
+const fullRecordTriggers = new Set([
+  "manual_frontend",
+  "audio_transcription",
+]);
+
+const selectTargetSections = (
+  text: string,
+  explicitSection: SectionName | null,
+  trigger?: string | null
+): SectionName[] => {
+  if (explicitSection) return [explicitSection];
+
+  // Una transcripcion completa debe intentar poblar la ficha canonica completa.
+  // El prompt obliga a dejar vacio cualquier campo que no tenga evidencia.
+  if (fullRecordTriggers.has(String(trigger || ""))) {
+    return [...sectionNames];
+  }
+
+  // En vivo se conserva la seleccion incremental para no reprocesar los diez
+  // campos por cada fragmento recibido.
+  return inferSections(text);
+};
+
 const parseSection = (raw: string | null | undefined): SectionName | null => {
   const value = String(raw || "").trim() as SectionName;
   return sectionNames.includes(value) ? value : null;
@@ -418,6 +441,8 @@ const resolveTemplateContext = async (
     .join("\n");
 
   return [
+    "Este contexto de especialidad es complementario: no cambia las claves, la estructura ni las reglas de llenado de la anamnesis canonica.",
+    "Usalo solo para reconocer y redactar mejor la informacion realmente mencionada. No exijas datos especializados ni completes campos sin evidencia textual.",
     `Ficha seleccionada: ${template.nombrePlantilla}.`,
     template.descripcion ? `Contexto clinico: ${template.descripcion}` : "",
     sectionGuidance ? `Enfoque por campo:\n${sectionGuidance}` : "",
@@ -554,7 +579,11 @@ export const clinicalWorker = new Worker<ClinicalExtractionJobData>(
     }
 
     const explicitSection = parseSection(seccionObjetivo);
-    const targetSections = explicitSection ? [explicitSection] : inferSections(compactTranscript);
+    const targetSections = selectTargetSections(
+      compactTranscript,
+      explicitSection,
+      job.data.trigger
+    );
     logger.info("[clinical-worker] target-sections", {
       consultaId,
       explicitSection,
@@ -645,7 +674,7 @@ export const clinicalWorker = new Worker<ClinicalExtractionJobData>(
       const response = await openai.chat.completions.create({
         model,
         temperature: numericTemperature,
-        max_tokens: explicitSection ? 800 : 1800,
+        max_tokens: explicitSection ? 800 : targetSections.length === sectionNames.length ? 3200 : 1800,
         messages: [{ role: "user", content: prompt }],
         response_format: { type: "json_object" },
       });
@@ -739,6 +768,7 @@ export const clinicalWorker = new Worker<ClinicalExtractionJobData>(
           resumenSugeridoIa: extraction.resumen || null,
           origenDato: extraction.origenDato || null,
           ultimaEjecucionAgenteId: execution.id,
+          allowReplaceReviewedNoReferido: job.data.trigger === "manual_frontend",
           evidencias,
         });
         logger.info("[clinical-worker] section:suggested", {

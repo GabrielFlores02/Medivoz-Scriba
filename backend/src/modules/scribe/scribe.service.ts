@@ -562,6 +562,7 @@ export class ScribeService {
       confianza?: string | null;
       resumenSugeridoIa?: string | null;
       origenDato?: string | null;
+      allowReplaceReviewedNoReferido?: boolean;
       evidencias?: Array<{ segmentoTranscripcionId?: string | null; textoEvidencia: string; confianza?: string | null }>;
     }
   ) {
@@ -577,7 +578,16 @@ export class ScribeService {
       )
       .limit(1);
 
-    if (existing?.estado === "bloqueada" || existing?.estado === "revisada") {
+    const canReplaceReviewedNoReferido = Boolean(
+      options?.allowReplaceReviewedNoReferido &&
+      existing?.estado === "revisada" &&
+      existing.textoActual?.trim().toLowerCase() === "no referido"
+    );
+
+    if (
+      existing?.estado === "bloqueada" ||
+      (existing?.estado === "revisada" && !canReplaceReviewedNoReferido)
+    ) {
       logger.info("[scribe] ia-suggestion:skip-locked-or-reviewed", {
         fichaId,
         section: nombre,
@@ -597,6 +607,7 @@ export class ScribeService {
       origenActualizacion: "ia" as const,
       ultimaEjecucionAgenteId: options?.ejecucionAgenteId ?? options?.ultimaEjecucionAgenteId ?? null,
       confianza: options?.confianza ?? existing?.confianza ?? null,
+      ...(canReplaceReviewedNoReferido ? { textoActual: null } : {}),
       updatedAt: new Date(),
     };
 
@@ -626,6 +637,7 @@ export class ScribeService {
       confidence: options?.confianza ?? existing?.confianza ?? null,
       hasSummary: Boolean(options?.resumenSugeridoIa?.trim()),
       executionId: options?.ejecucionAgenteId ?? options?.ultimaEjecucionAgenteId ?? null,
+      replacedReviewedNoReferido: canReplaceReviewedNoReferido,
     });
 
     if (options?.evidencias?.length) {

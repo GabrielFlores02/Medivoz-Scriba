@@ -220,11 +220,23 @@ const transcribeWithAudioStaging = async (params: {
 
   try {
     const payload = await transcribeAudioBuffer(params.buffer, params.mimeType, params.fileName);
+    let extractionJob: Awaited<ReturnType<typeof enqueueClinicalExtraction>> | null = null;
     if (payload.formattedTranscription?.trim()) {
-      await transcriptionSegmentService.ensureSegmentsFromTranscript({
+      const segmentResult = await transcriptionSegmentService.ensureSegmentsFromTranscript({
         consultaId: params.consultaId,
         transcript: payload.formattedTranscription,
         origin: params.fileName ? "archivo_subido" : "fusion_sistema",
+      });
+      extractionJob = await enqueueClinicalExtraction({
+        consultaId: params.consultaId,
+        segmentoDesde: 1,
+        segmentoHasta: segmentResult.maxSequence || undefined,
+        trigger: "audio_transcription",
+      });
+      logger.info("[scribe-route] audio-transcription:extraction-queued", {
+        consultaId: params.consultaId,
+        jobId: extractionJob.jobId,
+        segmentoHasta: segmentResult.maxSequence || null,
       });
     }
     await audioTemporalService.deleteNow(tempAudio.id, tempAudio.rutaArchivo, "procesado_ok_borrado_inmediato");
@@ -235,6 +247,7 @@ const transcribeWithAudioStaging = async (params: {
         staged: true,
         deletedImmediately: true,
       },
+      extractionJob,
     };
   } catch (error: any) {
     await audioTemporalService.markProcessingError(tempAudio.id, error?.message || "transcription_failed");

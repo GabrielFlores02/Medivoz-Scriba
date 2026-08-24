@@ -67,6 +67,7 @@ interface MedicalRecordFormProps {
   isValidationTiming?: boolean;
   hasValidationStarted?: boolean;
   templateSections?: AnamnesisTemplateSection[];
+  isExtractionPending?: boolean;
 }
 
 const formatEditTime = (durationMs: number) => {
@@ -158,7 +159,11 @@ const fields: FieldConfig[] = [
 ];
 
 const fieldGroups: { id: string; label: string; fields: (keyof MedicalRecordFormData)[] }[] = [
-  { id: "cuadro", label: "Cuadro actual", fields: ["motivo_consulta", "tiempo_enfermedad", "forma_inicio", "curso_enfermedad"] },
+  {
+    id: "cuadro",
+    label: "Cuadro actual",
+    fields: ["motivo_consulta", "tiempo_enfermedad", "forma_inicio", "curso_enfermedad"],
+  },
   { id: "historia", label: "Historia", fields: ["historia_cronologica", "sintomas_principales"] },
   { id: "contexto", label: "Antecedentes", fields: ["antecedentes", "estado_funcional_basal"] },
   { id: "apoyo", label: "Estudios", fields: ["estudios_previos", "notas_adicionales"] },
@@ -184,12 +189,11 @@ export const MedicalRecordForm = memo(function MedicalRecordForm({
   isValidationTiming = false,
   hasValidationStarted = false,
   templateSections = [],
+  isExtractionPending = false,
 }: MedicalRecordFormProps) {
   const [validatingField, setValidatingField] = useState<keyof MedicalRecordFormData | null>(null);
   const isModified = (field: keyof MedicalRecordFormData) => modifiedFields.has(field);
-  const templateSectionMap = new Map(
-    templateSections.map((section) => [section.seccion, section])
-  );
+  const templateSectionMap = new Map(templateSections.map((section) => [section.seccion, section]));
   const isLocked = (field: keyof MedicalRecordFormData) =>
     sectionMeta[field]?.estado === "bloqueada";
   const isReviewed = (field: keyof MedicalRecordFormData) =>
@@ -220,10 +224,7 @@ export const MedicalRecordForm = memo(function MedicalRecordForm({
     recordSummary.resumenActual.trim() !== recordSummary.resumenSugeridoIa?.trim()
   );
 
-  const validateField = async (
-    field: keyof MedicalRecordFormData,
-    contentOverride?: string
-  ) => {
+  const validateField = async (field: keyof MedicalRecordFormData, contentOverride?: string) => {
     if (!onAcceptSuggestion || validatingField) return;
     setValidatingField(field);
     try {
@@ -243,6 +244,7 @@ export const MedicalRecordForm = memo(function MedicalRecordForm({
     const isValidating = validatingField === field;
     const hasContent = hasAnythingToValidate(field);
     const canValidate = !locked && !reviewed;
+    const isWaitingForExtraction = isExtractionPending && !hasContent;
     const templateSection = templateSectionMap.get(field);
 
     return (
@@ -317,21 +319,25 @@ export const MedicalRecordForm = memo(function MedicalRecordForm({
               size="sm"
               className="h-8 px-2 text-xs"
               onClick={() => void validateField(field, hasContent ? undefined : "No referido")}
-              disabled={!canValidate || isValidating}
+              disabled={!canValidate || isValidating || isWaitingForExtraction}
               title={
                 reviewed
                   ? "Esta sección ya está validada"
-                  : !hasContent
-                  ? "Guardar esta sección como No referido"
-                  : modified || editedOverSuggestion
-                    ? "Validar el texto editado"
-                    : "Validar esta sección"
+                  : isWaitingForExtraction
+                    ? "Espera a que la IA termine de revisar la transcripción"
+                    : !hasContent
+                      ? "Guardar esta sección como No referido"
+                      : modified || editedOverSuggestion
+                        ? "Validar el texto editado"
+                        : "Validar esta sección"
               }
             >
               {isValidating ? (
                 <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
               ) : reviewed ? (
                 <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+              ) : isWaitingForExtraction ? (
+                <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
               ) : !hasContent ? (
                 <CircleSlash2 className="mr-1 h-3.5 w-3.5" />
               ) : (
@@ -341,11 +347,13 @@ export const MedicalRecordForm = memo(function MedicalRecordForm({
                 ? "Validando..."
                 : reviewed
                   ? "Validado"
-                  : !hasContent
-                    ? "No referido"
-                  : modified || editedOverSuggestion
-                    ? "Validar cambios"
-                    : "Validar"}
+                  : isWaitingForExtraction
+                    ? "Analizando..."
+                    : !hasContent
+                      ? "No referido"
+                      : modified || editedOverSuggestion
+                        ? "Validar cambios"
+                        : "Validar"}
             </Button>
           </div>
         </div>
@@ -434,9 +442,7 @@ export const MedicalRecordForm = memo(function MedicalRecordForm({
             <Badge
               variant="outline"
               className={
-                isValidationTiming
-                  ? "border-emerald-300 bg-emerald-50 text-emerald-800"
-                  : ""
+                isValidationTiming ? "border-emerald-300 bg-emerald-50 text-emerald-800" : ""
               }
             >
               <CheckCircle2 className="mr-1 h-3.5 w-3.5" />
@@ -467,9 +473,18 @@ export const MedicalRecordForm = memo(function MedicalRecordForm({
             const groupReviewed = groupFields.filter(({ field }) => isReviewed(field)).length;
             const groupPending = groupFields.filter(({ field }) => hasPending(field)).length;
             return (
-              <TabsTrigger key={group.id} value={group.id} className="min-h-11 gap-1 px-2 py-2 text-xs">
+              <TabsTrigger
+                key={group.id}
+                value={group.id}
+                className="min-h-11 gap-1 px-2 py-2 text-xs"
+              >
                 <span>{group.label}</span>
-                <span className={cn("text-[10px]", groupPending ? "text-amber-700" : "text-muted-foreground")}>
+                <span
+                  className={cn(
+                    "text-[10px]",
+                    groupPending ? "text-amber-700" : "text-muted-foreground"
+                  )}
+                >
                   {groupReviewed}/{groupFields.length}
                 </span>
               </TabsTrigger>
@@ -534,7 +549,8 @@ export const MedicalRecordForm = memo(function MedicalRecordForm({
                   Texto registrado en ESSI
                 </h4>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Pega exactamente el único párrafo que escribiste en ESSI para la comparación PDQI-9.
+                  Pega exactamente el único párrafo que escribiste en ESSI para la comparación
+                  PDQI-9.
                 </p>
               </div>
               <Textarea

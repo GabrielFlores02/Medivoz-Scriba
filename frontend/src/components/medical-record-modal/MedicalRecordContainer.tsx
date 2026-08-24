@@ -57,6 +57,7 @@ interface MedicalRecordContainerProps {
   showTranscriptionPanel?: boolean;
   showTranscriptionSummary?: boolean;
   templateSections?: AnamnesisTemplateSection[];
+  isExtractionPending?: boolean;
 }
 
 export const MedicalRecordContainer = memo(
@@ -95,6 +96,7 @@ export const MedicalRecordContainer = memo(
     showTranscriptionPanel = true,
     showTranscriptionSummary = true,
     templateSections,
+    isExtractionPending = false,
   }: MedicalRecordContainerProps) {
     const { isAutoFilling, autoFillMedicalRecord } = useMedicalRecordAutoFill();
 
@@ -193,6 +195,7 @@ export const MedicalRecordContainer = memo(
             onRetrySection={onRetrySection}
             onRefineSection={onRefineSection}
             templateSections={templateSections}
+            isExtractionPending={isExtractionPending || isAutoFilling}
           />
         </div>
 
@@ -232,7 +235,8 @@ export const MedicalRecordContainer = memo(
       prevProps.showCloseButton === nextProps.showCloseButton &&
       prevProps.showTranscriptionPanel === nextProps.showTranscriptionPanel &&
       prevProps.showTranscriptionSummary === nextProps.showTranscriptionSummary &&
-      prevProps.templateSections === nextProps.templateSections
+      prevProps.templateSections === nextProps.templateSections &&
+      prevProps.isExtractionPending === nextProps.isExtractionPending
       // Note: Callbacks (handleChange, toggleTranscriptionView, onSave, onExport, etc.)
       // should be memoized with useCallback in parent component
     );

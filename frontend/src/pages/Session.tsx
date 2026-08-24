@@ -104,7 +104,9 @@ export default function Session() {
         const response = await api.get<AnamnesisTemplate[]>("/clinical/anamnesis-templates");
         setTemplates(response.data);
         const defaultTemplate = response.data.find((template) => template.esPredeterminada);
-        setSelectedTemplateId((current) => current || defaultTemplate?.id || response.data[0]?.id || "");
+        setSelectedTemplateId(
+          (current) => current || defaultTemplate?.id || response.data[0]?.id || ""
+        );
       } catch (error) {
         logger.error("No se pudieron cargar las fichas:", error);
         toast.error("No se pudieron cargar las fichas disponibles");
@@ -124,50 +126,53 @@ export default function Session() {
     return () => configureGuard(null);
   }, [configureGuard, handleSave, hasPendingRecordWork, isSaving]);
 
-  const loadPatient = useCallback(async (id: string) => {
-    setCurrentSessionId(null);
-    setTranscription("");
-    try {
-      const [patientResponse, consultationsResponse] = await Promise.all([
-        api.get(`/clinical/patients/${id}`),
-        api.get("/clinical/consultations", { params: { pacienteId: id } }),
-      ]);
-      const data = patientResponse.data;
-      if (data) {
-        setSelectedPatient({
-          id: data.id,
-          nombre: data.nombre,
-          dni: data.dni ?? null,
-          codigoPaciente: data.codigoPaciente ?? null,
-          edad: data.edad,
-          ocupacion: data.ocupacion,
-          procedencia: data.procedencia,
-          diagnostico: data.diagnostico,
-          ultima_visita: data.ultimaVisita,
-        });
-        const currentConsultation = Array.isArray(consultationsResponse.data)
-          ? consultationsResponse.data[0]
-          : null;
-        if (currentConsultation?.id) {
-          setCurrentSessionId(currentConsultation.id);
-          setTranscription(currentConsultation.transcripcion || "");
-          setSelectedTemplateId(currentConsultation.plantillaAnamnesisId || defaultTemplateId);
-          setAnamnesisPhase({
-            estadoAnamnesis: currentConsultation.estadoAnamnesis,
-            segmentoFinAnamnesis: currentConsultation.segmentoFinAnamnesis,
-            confianzaCierreAnamnesis: currentConsultation.confianzaCierreAnamnesis,
-            motivoCierreAnamnesis: currentConsultation.motivoCierreAnamnesis,
+  const loadPatient = useCallback(
+    async (id: string) => {
+      setCurrentSessionId(null);
+      setTranscription("");
+      try {
+        const [patientResponse, consultationsResponse] = await Promise.all([
+          api.get(`/clinical/patients/${id}`),
+          api.get("/clinical/consultations", { params: { pacienteId: id } }),
+        ]);
+        const data = patientResponse.data;
+        if (data) {
+          setSelectedPatient({
+            id: data.id,
+            nombre: data.nombre,
+            dni: data.dni ?? null,
+            codigoPaciente: data.codigoPaciente ?? null,
+            edad: data.edad,
+            ocupacion: data.ocupacion,
+            procedencia: data.procedencia,
+            diagnostico: data.diagnostico,
+            ultima_visita: data.ultimaVisita,
           });
-        } else {
-          setSelectedTemplateId(defaultTemplateId);
-          setAnamnesisPhase(null);
+          const currentConsultation = Array.isArray(consultationsResponse.data)
+            ? consultationsResponse.data[0]
+            : null;
+          if (currentConsultation?.id) {
+            setCurrentSessionId(currentConsultation.id);
+            setTranscription(currentConsultation.transcripcion || "");
+            setSelectedTemplateId(currentConsultation.plantillaAnamnesisId || defaultTemplateId);
+            setAnamnesisPhase({
+              estadoAnamnesis: currentConsultation.estadoAnamnesis,
+              segmentoFinAnamnesis: currentConsultation.segmentoFinAnamnesis,
+              confianzaCierreAnamnesis: currentConsultation.confianzaCierreAnamnesis,
+              motivoCierreAnamnesis: currentConsultation.motivoCierreAnamnesis,
+            });
+          } else {
+            setSelectedTemplateId(defaultTemplateId);
+            setAnamnesisPhase(null);
+          }
         }
+      } catch (requestError) {
+        logger.error("Error loading patient:", requestError);
+        toast.error("Error al cargar el paciente");
       }
-    } catch (requestError) {
-      logger.error("Error loading patient:", requestError);
-      toast.error("Error al cargar el paciente");
-    }
-  }, [defaultTemplateId]);
+    },
+    [defaultTemplateId]
+  );
 
   useEffect(() => {
     const id = searchParams.get("patientId");
@@ -195,25 +200,28 @@ export default function Session() {
     [defaultTemplateId, loadPatient, requestAction]
   );
 
-  const handleTemplateChange = useCallback(async (templateId: string) => {
-    const previousTemplateId = selectedTemplateId;
-    setSelectedTemplateId(templateId);
-    if (!currentSessionId) return;
+  const handleTemplateChange = useCallback(
+    async (templateId: string) => {
+      const previousTemplateId = selectedTemplateId;
+      setSelectedTemplateId(templateId);
+      if (!currentSessionId) return;
 
-    setIsSavingTemplate(true);
-    try {
-      await api.patch(`/clinical/consultations/${currentSessionId}`, {
-        plantillaAnamnesisId: templateId,
-      });
-      toast.success("Ficha de la consulta actualizada");
-    } catch (error) {
-      setSelectedTemplateId(previousTemplateId);
-      logger.error("No se pudo cambiar la ficha de la consulta:", error);
-      toast.error("No se pudo cambiar la ficha de la consulta");
-    } finally {
-      setIsSavingTemplate(false);
-    }
-  }, [currentSessionId, selectedTemplateId]);
+      setIsSavingTemplate(true);
+      try {
+        await api.patch(`/clinical/consultations/${currentSessionId}`, {
+          plantillaAnamnesisId: templateId,
+        });
+        toast.success("Ficha de la consulta actualizada");
+      } catch (error) {
+        setSelectedTemplateId(previousTemplateId);
+        logger.error("No se pudo cambiar la ficha de la consulta:", error);
+        toast.error("No se pudo cambiar la ficha de la consulta");
+      } finally {
+        setIsSavingTemplate(false);
+      }
+    },
+    [currentSessionId, selectedTemplateId]
+  );
 
   const handleTranscriptionReady = useCallback((text: string) => {
     setTranscription(text);
@@ -227,7 +235,7 @@ export default function Session() {
     structuringTimeoutRef.current = window.setTimeout(() => {
       setIsStructuringLive(false);
       structuringTimeoutRef.current = null;
-    }, 15_000);
+    }, 90_000);
   }, []);
 
   useEffect(() => {
@@ -281,7 +289,7 @@ export default function Session() {
 
     const refreshLiveRecord = async () => {
       const activityAgeMs = Date.now() - lastTranscriptionActivityRef.current;
-      if (activityAgeMs > 20_000 || recordRefreshInFlightRef.current) return;
+      if (activityAgeMs > 90_000 || recordRefreshInFlightRef.current) return;
 
       recordRefreshInFlightRef.current = true;
       try {
@@ -297,6 +305,20 @@ export default function Session() {
     }, 2_500);
     return () => window.clearInterval(intervalId);
   }, [currentSessionId, refreshAnamnesisPhase, refreshRecordData]);
+
+  useEffect(() => {
+    if (!isStructuringLive) return;
+    const hasIaSuggestion = Object.values(sectionMeta).some(
+      (section) => section?.estado === "borrador_ia" && section.textoSugeridoIa?.trim()
+    );
+    if (!hasIaSuggestion) return;
+
+    setIsStructuringLive(false);
+    if (structuringTimeoutRef.current) {
+      window.clearTimeout(structuringTimeoutRef.current);
+      structuringTimeoutRef.current = null;
+    }
+  }, [isStructuringLive, sectionMeta]);
 
   return (
     <div className="flex min-h-screen bg-background lg:h-dvh lg:overflow-hidden">
@@ -359,129 +381,132 @@ export default function Session() {
             <div className="flex min-h-[600px] flex-col lg:col-span-8 lg:h-full lg:min-h-0">
               <Card className="flex h-full min-h-0 flex-col overflow-hidden bg-card shadow-sm">
                 <Tabs defaultValue="anamnesis" className="flex h-full min-h-0 flex-col">
-
-                <CardHeader className="border-b bg-muted/10 px-4 py-3">
-                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <Activity className="h-4 w-4 text-primary" />
-                        Historia clínica electrónica
-                      </CardTitle>
-                      <CardDescription className="mt-0.5 text-xs">
-                        Documentación automática estructurada basada en la transcripción.
-                      </CardDescription>
-                    </div>
-                    {recordExists && (
-                      <Badge
-                        variant="outline"
-                        className={
-                          recordFinalized
-                            ? "w-fit border-emerald-200 bg-emerald-50 text-emerald-700"
-                            : "w-fit border-amber-200 bg-amber-50 text-amber-800"
-                        }
-                      >
-                        <Activity className="mr-1 h-3 w-3" />
-                        {recordFinalized ? "Ficha guardada" : "Borrador pendiente"}
-                      </Badge>
-                    )}
-                    {isStructuringLive && (
-                      <Badge
-                        variant="outline"
-                        className="w-fit border-sky-200 bg-sky-50 text-sky-800"
-                      >
-                        <Sparkles className="mr-1 h-3 w-3 animate-pulse" />
-                        IA estructurando en vivo
-                      </Badge>
-                    )}
-                    {anamnesisPhase?.estadoAnamnesis &&
-                      anamnesisPhase.estadoAnamnesis !== "no_iniciada" && (
+                  <CardHeader className="border-b bg-muted/10 px-4 py-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2 text-base">
+                          <Activity className="h-4 w-4 text-primary" />
+                          Historia clínica electrónica
+                        </CardTitle>
+                        <CardDescription className="mt-0.5 text-xs">
+                          Documentación automática estructurada basada en la transcripción.
+                        </CardDescription>
+                      </div>
+                      {recordExists && (
+                        <Badge
+                          variant="outline"
+                          className={
+                            recordFinalized
+                              ? "w-fit border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "w-fit border-amber-200 bg-amber-50 text-amber-800"
+                          }
+                        >
+                          <Activity className="mr-1 h-3 w-3" />
+                          {recordFinalized ? "Ficha guardada" : "Borrador pendiente"}
+                        </Badge>
+                      )}
+                      {isStructuringLive && (
                         <Badge
                           variant="outline"
                           className="w-fit border-sky-200 bg-sky-50 text-sky-800"
-                          title={anamnesisPhase.motivoCierreAnamnesis || undefined}
                         >
-                          <Activity className="mr-1 h-3 w-3" />
-                          {anamnesisPhaseLabels[anamnesisPhase.estadoAnamnesis] ||
-                            "Fase de anamnesis"}
-                          {anamnesisPhase.segmentoFinAnamnesis
-                            ? ` · seg. ${anamnesisPhase.segmentoFinAnamnesis}`
-                            : ""}
+                          <Sparkles className="mr-1 h-3 w-3 animate-pulse" />
+                          IA estructurando en vivo
                         </Badge>
                       )}
-                  </div>
+                      {anamnesisPhase?.estadoAnamnesis &&
+                        anamnesisPhase.estadoAnamnesis !== "no_iniciada" && (
+                          <Badge
+                            variant="outline"
+                            className="w-fit border-sky-200 bg-sky-50 text-sky-800"
+                            title={anamnesisPhase.motivoCierreAnamnesis || undefined}
+                          >
+                            <Activity className="mr-1 h-3 w-3" />
+                            {anamnesisPhaseLabels[anamnesisPhase.estadoAnamnesis] ||
+                              "Fase de anamnesis"}
+                            {anamnesisPhase.segmentoFinAnamnesis
+                              ? ` · seg. ${anamnesisPhase.segmentoFinAnamnesis}`
+                              : ""}
+                          </Badge>
+                        )}
+                    </div>
 
-                  <TabsList className="mt-2 grid h-9 w-full grid-cols-2">
-                    <TabsTrigger value="anamnesis" className="gap-2">
-                      <Stethoscope className="h-4 w-4" />
-                      Anamnesis
-                    </TabsTrigger>
-                    <TabsTrigger value="transcripcion" className="gap-2">
-                      <FileText className="h-4 w-4" />
-                      Transcripción en vivo
-                      <span className="text-[10px] text-muted-foreground">
-                        {transcription.length}
-                      </span>
-                    </TabsTrigger>
-                  </TabsList>
-                </CardHeader>
+                    <TabsList className="mt-2 grid h-9 w-full grid-cols-2">
+                      <TabsTrigger value="anamnesis" className="gap-2">
+                        <Stethoscope className="h-4 w-4" />
+                        Anamnesis
+                      </TabsTrigger>
+                      <TabsTrigger value="transcripcion" className="gap-2">
+                        <FileText className="h-4 w-4" />
+                        Transcripción en vivo
+                        <span className="text-[10px] text-muted-foreground">
+                          {transcription.length}
+                        </span>
+                      </TabsTrigger>
+                    </TabsList>
+                  </CardHeader>
 
-                <TabsContent value="anamnesis" className="mt-0 min-h-0 flex-1 overflow-hidden">
-                  <CardContent className="h-full overflow-y-auto bg-muted/5 p-0">
-                    {patientId && currentSessionId ? (
-                      <div className="mx-auto w-full max-w-6xl p-3">
-                        <div className="rounded-md border bg-background p-1 shadow-sm">
-                          <MedicalRecordContainer
-                            formData={formData}
-                            setFormData={setFormData}
-                            transcriptionSnippet={transcriptionSnippet}
-                            fullTranscription={fullTranscription}
-                            showFullTranscription={showFullTranscription}
-                            toggleTranscriptionView={toggleTranscriptionView}
-                            handleChange={handleChange}
-                            sectionMeta={sectionMeta}
-                            modifiedFields={modifiedFields}
-                            recordSummary={recordSummary}
-                            onRecordSummaryChange={handleRecordSummaryChange}
-                            onEssiNoteChange={handleEssiNoteChange}
-                            validationWarnings={validationWarnings}
-                            editElapsedMs={editElapsedMs}
-                            isEditTiming={isEditTiming}
-                            validationElapsedMs={validationElapsedMs}
-                            isValidationTiming={isValidationTiming}
-                            hasValidationStarted={hasValidationStarted}
-                            onAcceptSuggestion={handleAcceptSuggestion}
-                            onRejectSuggestion={handleRejectSuggestion}
-                            onBlockSection={handleBlockSection}
-                            onRetrySection={handleRetrySection}
-                            onRefineSection={handleRefineSection}
-                            isSaving={isSaving}
-                            isExporting={isExporting}
-                            onClose={() => {}}
-                            onSave={async () => {
-                              await handleSave();
-                            }}
-                            onExport={async () => {
-                              await handleExportPDF();
-                            }}
-                            refreshTranscription={refreshTranscription}
-                            refreshRecordData={refreshRecordData}
-                            patientId={patientId}
-                            sessionId={currentSessionId}
-                            showCloseButton={false}
-                            showTranscriptionPanel={false}
-                            templateSections={selectedTemplate?.secciones}
-                          />
+                  <TabsContent value="anamnesis" className="mt-0 min-h-0 flex-1 overflow-hidden">
+                    <CardContent className="h-full overflow-y-auto bg-muted/5 p-0">
+                      {patientId && currentSessionId ? (
+                        <div className="mx-auto w-full max-w-6xl p-3">
+                          <div className="rounded-md border bg-background p-1 shadow-sm">
+                            <MedicalRecordContainer
+                              formData={formData}
+                              setFormData={setFormData}
+                              transcriptionSnippet={transcriptionSnippet}
+                              fullTranscription={fullTranscription}
+                              showFullTranscription={showFullTranscription}
+                              toggleTranscriptionView={toggleTranscriptionView}
+                              handleChange={handleChange}
+                              sectionMeta={sectionMeta}
+                              modifiedFields={modifiedFields}
+                              recordSummary={recordSummary}
+                              onRecordSummaryChange={handleRecordSummaryChange}
+                              onEssiNoteChange={handleEssiNoteChange}
+                              validationWarnings={validationWarnings}
+                              editElapsedMs={editElapsedMs}
+                              isEditTiming={isEditTiming}
+                              validationElapsedMs={validationElapsedMs}
+                              isValidationTiming={isValidationTiming}
+                              hasValidationStarted={hasValidationStarted}
+                              onAcceptSuggestion={handleAcceptSuggestion}
+                              onRejectSuggestion={handleRejectSuggestion}
+                              onBlockSection={handleBlockSection}
+                              onRetrySection={handleRetrySection}
+                              onRefineSection={handleRefineSection}
+                              isSaving={isSaving}
+                              isExporting={isExporting}
+                              onClose={() => {}}
+                              onSave={async () => {
+                                await handleSave();
+                              }}
+                              onExport={async () => {
+                                await handleExportPDF();
+                              }}
+                              refreshTranscription={refreshTranscription}
+                              refreshRecordData={refreshRecordData}
+                              patientId={patientId}
+                              sessionId={currentSessionId}
+                              showCloseButton={false}
+                              showTranscriptionPanel={false}
+                              templateSections={selectedTemplate?.secciones}
+                              isExtractionPending={isStructuringLive}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    ) : (
-                      <EmptyRecordPlaceholder />
-                    )}
-                  </CardContent>
-                </TabsContent>
+                      ) : (
+                        <EmptyRecordPlaceholder />
+                      )}
+                    </CardContent>
+                  </TabsContent>
 
-                <TabsContent value="transcripcion" className="mt-0 min-h-0 flex-1 overflow-hidden bg-muted/5 p-4 sm:p-5">
-                  <Transcription transcription={transcription} />
-                </TabsContent>
+                  <TabsContent
+                    value="transcripcion"
+                    className="mt-0 min-h-0 flex-1 overflow-hidden bg-muted/5 p-4 sm:p-5"
+                  >
+                    <Transcription transcription={transcription} />
+                  </TabsContent>
                 </Tabs>
               </Card>
             </div>
